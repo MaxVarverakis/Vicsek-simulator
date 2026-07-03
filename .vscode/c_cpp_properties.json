@@ -1,0 +1,29 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "${default}",
+                "${workspaceFolder}/src",
+                "/opt/homebrew/Cellar/nlohmann-json/3.12.0/include",
+                "/opt/homebrew/Cellar/libomp/22.1.4/include",
+                "/opt/homebrew/Cellar/SDL2/2.32.10/include",
+                "/opt/homebrew/Cellar/glew/2.3.1/include",
+                "/opt/homebrew/Cellar/glfw/3.4/include",
+                "/opt/homebrew/Cellar/glm/1.0.3/include",
+                "/Users/max/OpenGL_Framework/src"
+                // "/opt/homebrew/Cellar/sfml/3.0.2/include",
+                // "/opt/homebrew/Cellar/eigen/5.0.1/include/eigen3/Eigen",
+            ],
+            "defines": [],
+            "macFrameworkPath": [
+                "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++23",
+            "intelliSenseMode": "macos-clang-arm64"
+            // "configurationProvider": "ms-vscode.makefile-tools"
+        }
+    ],
+    "version": 4
+}
