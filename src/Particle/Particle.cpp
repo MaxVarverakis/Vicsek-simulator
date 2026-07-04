@@ -63,7 +63,7 @@ std::vector<float> Swarm::sense()
             sinSum += glm::sin(particles[neighborIdx].angle) * weight;
             cosSum += glm::cos(particles[neighborIdx].angle) * weight;
         }
-        // should clamp by a max centripetal acceleration
+        
         angles[i] = glm::atan(sinSum, cosSum) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
     }
 

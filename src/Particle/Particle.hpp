@@ -42,6 +42,7 @@ struct Particle
 struct Swarm
 {
     float x_max, y_max;
+    float scale;
     uint32_t master_seed;
     std::mt19937 rng;
     std::uniform_real_distribution<float> dist{ 0.0f, 1.0f };
@@ -64,18 +65,20 @@ struct Swarm
         }
     }
 
-    Swarm(float width, float height, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v)
+    Swarm(float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v)
         : x_max { width }
         , y_max { height }
+        , scale { scaleFactor }
         , master_seed { seed }
         , rng(seed)
         , noiseScale { scaleNoise }
         , nNeighbors { neighborCount }
         , velocity { v } {};
     
-    Swarm(float width, float height, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, std::vector<Particle> pts)
+    Swarm(float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, std::vector<Particle> pts)
         : x_max { width }
         , y_max { height }
+        , scale { scaleFactor }
         , master_seed { seed }
         , rng(seed)
         , noiseScale { scaleNoise }
@@ -84,9 +87,10 @@ struct Swarm
         , particles { pts }
         { generateModelMatrices(); }
     
-    Swarm(float width, float height, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles)
+    Swarm(float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles)
         : x_max { width }
         , y_max { height }
+        , scale { scaleFactor }
         , master_seed { seed }
         , rng(seed)
         , noiseScale { scaleNoise }
@@ -124,7 +128,7 @@ struct Swarm
         // setting a max angle change outright
         const float max_turn_speed = 2.0f * PI;
 
-        std::vector<float> angles { tradSense() };
+        std::vector<float> angles { sense() };
 
         for (unsigned int i = 0; i < particles.size(); ++i)
         {
@@ -149,7 +153,9 @@ struct Swarm
     {
         glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(particle.position, 0.0f));
         // render-space 0 degrees is vertical (+yhat direction) as opposed to +xhat direction
-        return glm::rotate(modelMatrix, particle.angle - glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        modelMatrix = glm::rotate(modelMatrix, particle.angle - glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+        return glm::scale(modelMatrix, glm::vec3(scale, scale, 1.0f));
     }
 
     void generateModelMatrices()

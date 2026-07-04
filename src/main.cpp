@@ -31,7 +31,8 @@ const float height { 846.0f };
 
 
 // project-specific settings
-const float triangle_scale { 1 / 64.0f };
+// const float triangle_scale { 1 / 64.0f };
+const float triangle_scale { 5.0f };
 const unsigned int numObjs { 200 };
 const unsigned int neighborCount { 5 };
 const float DT { 0.025f };
@@ -119,7 +120,7 @@ int main()
             printKey();
 
             // specifying the number of agents automatically generates random particles
-            Swarm swarm(width, height, rd(), noiseScale, neighborCount, v_magnitude, numObjs);
+            Swarm swarm(width, height, triangle_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs);
 
             // buffer stuff and initialization happens here
             std::vector<Triangle> tris;
@@ -128,7 +129,8 @@ int main()
             // create triangles
             for (unsigned int i = 0; i < numObjs; ++i)
             {
-                tris.emplace_back(Triangle(triangle_scale * glm::vec2(width/2.0f, 0.0f), triangle_scale * glm::vec2(width/4.0f, height), glm::fvec4(1.0f)));
+                tris.emplace_back(Triangle(glm::vec2(0.0f, 2.0f), glm::vec2(1.7321f, -1.0f), glm::vec2(-1.7321f, -1.0f), glm::fvec4(1.0f)));
+                // tris.emplace_back(Triangle(glm::vec2(0.0f, 0.0f), triangle_scale * glm::vec2(width/2.0f, 0.0f), triangle_scale * glm::vec2(width/4.0f, height), glm::fvec4(1.0f)));
             }
 
             // prepare triangles for graphics
@@ -159,7 +161,8 @@ int main()
             glm::mat4 MVP { proj * view * model };
 
             // tri_shader stuff happens here
-            Shader tri_shader("/Users/max/OpenGL_Framework/res/shaders", "triangle_");
+            // Shader tri_shader("/Users/max/OpenGL_Framework/res/shaders", "triangle_");
+            Shader tri_shader("/Users/max/UCLA/Research/Codes/Vicsek/shaders", "circle_cheat_");
             tri_shader.bind();
             tri_shader.setUniformMatrix4fv("u_MVP", MVP);
 
