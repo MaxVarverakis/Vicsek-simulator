@@ -13,7 +13,7 @@
 #include "Triangle/Triangle.hpp"
 
 // project-specific includes go here
-// #include "Utilities/Utilities.hpp"
+#include "Particle/Particle.hpp"
 
 SDL_Window* window;
 SDL_GLContext gl_context;
@@ -26,14 +26,18 @@ bool is_running;
 bool paused { true };
 bool step { false };
 
-const float width { 768.0f };
-const float height { 768.0f };
-const float triangle_scale { 1 / 16.0f };
+const float width { 1440.0f };
+const float height { 846.0f };
 
-// const double DT { 0.025 };
 
 // project-specific settings
-// unsigned int res { 20 / 2 };
+const float triangle_scale { 1 / 64.0f };
+const unsigned int numObjs { 200 };
+const unsigned int neighborCount { 5 };
+const float DT { 0.025f };
+const float noiseScale { 0.2f };
+const float v_magnitude { 200.0f };
+
 
 // initialize random
 std::random_device rd;
@@ -114,20 +118,15 @@ int main()
 
             printKey();
 
-            // buffer stuff and initialization happens here
+            // specifying the number of agents automatically generates random particles
+            Swarm swarm(width, height, rd(), noiseScale, neighborCount, v_magnitude, numObjs);
 
+            // buffer stuff and initialization happens here
             std::vector<Triangle> tris;
-            unsigned int num_objs { 1 };
-            tris.reserve(num_objs);
-            std::vector<glm::mat4> modelMatrices;
-            modelMatrices.reserve(num_objs);
-            glm::mat4 instMod = glm::mat4(1.0f);
-            instMod = glm::translate(instMod, glm::vec3(width/2.0f, height/2.0f, 0.0f));
-            instMod = glm::rotate(instMod, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-            modelMatrices.emplace_back(instMod);
+            tris.reserve(numObjs);
             
             // create triangles
-            for (unsigned int i = 0; i < num_objs; ++i)
+            for (unsigned int i = 0; i < numObjs; ++i)
             {
                 tris.emplace_back(Triangle(triangle_scale * glm::vec2(width/2.0f, 0.0f), triangle_scale * glm::vec2(width/4.0f, height), glm::fvec4(1.0f)));
             }
@@ -147,7 +146,7 @@ int main()
             }
             tri_VAO.addBuffer(tri_VBO, tri_layout);
 
-            VertexBuffer instanceVBO(modelMatrices.data(), static_cast<unsigned int>(modelMatrices.size() * sizeof(glm::mat4)), GL_DYNAMIC_DRAW);
+            VertexBuffer instanceVBO(swarm.modelMatrices.data(), static_cast<unsigned int>(swarm.modelMatrices.size() * sizeof(glm::mat4)), GL_DYNAMIC_DRAW);
             tri_VAO.addInstancedBuffer(instanceVBO, 2);
 
             // constructor automatically binds buffer
@@ -190,13 +189,13 @@ int main()
                 // evolve time if unpaused
                 if (not paused)
                 {
-                    // evolve(DT)
+                    swarm.updateParticles(DT);
                     // func wrapper for "write val to file"
                     // Utilities::addLine("path/to/file/name", val);
                 }
                 if (step)
                 {
-                    // evolve(DT)
+                    swarm.updateParticles(DT);
                     step = false;
                 }
 
@@ -204,12 +203,12 @@ int main()
                 
                 // update buffers (circle position, color, alpha)
                 // triangles.updateColors(values);
-                // tri_VBO.updateBuffer(triangles.m_vertices.data());
+                instanceVBO.updateBuffer(swarm.modelMatrices.data());
 
                 renderer.clear();
 
                 // draw objects
-                renderer.drawTriangles(tri_VAO, tri_IBO, tri_shader, static_cast<int>(num_objs));
+                renderer.drawTriangles(tri_VAO, tri_IBO, tri_shader, static_cast<int>(numObjs));
 
                 SDL_GL_SwapWindow(window);
             }
