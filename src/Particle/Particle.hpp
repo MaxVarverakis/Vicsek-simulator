@@ -54,6 +54,8 @@ struct Swarm
     std::vector<Particle> particles;
     std::vector<glm::mat4> modelMatrices;
 
+    float order_param;
+
     void print()
     {
         for (Particle& particle : particles)
@@ -124,6 +126,8 @@ struct Swarm
     
     void updateParticles(float dt)
     {
+        glm::vec2 v_hat_sum(0.0f);
+
         // I'm a little skeptical on doing this rather than just 
         // setting a max angle change outright
         const float max_turn_speed = 2.0f * PI;
@@ -146,7 +150,11 @@ struct Swarm
             
             particle.update(dt, x_max, y_max);
             modelMatrices[i] = generateModelMatrix(particle);
+
+            v_hat_sum += glm::vec2(glm::cos(particle.angle), glm::sin(particle.angle));
         }
+
+        order_param = glm::length(v_hat_sum) / static_cast<float>(particles.size());
     }
 
     glm::mat4 generateModelMatrix(Particle& particle)
@@ -168,4 +176,7 @@ struct Swarm
             matrices.emplace_back(generateModelMatrix(particle));
         }
     }
+
+    void changeNoise(float scaleNoise) { noiseScale = scaleNoise; }
+    void changeNN(unsigned int num) { nNeighbors = num; }
 };

@@ -14,6 +14,7 @@
 
 // project-specific includes go here
 #include "Particle/Particle.hpp"
+#include "Utilities/Utilities.hpp"
 
 SDL_Window* window;
 SDL_GLContext gl_context;
@@ -36,9 +37,9 @@ const float triangle_scale { 5.0f };
 const unsigned int numObjs { 200 };
 const unsigned int neighborCount { 5 };
 const float DT { 0.025f };
-const float noiseScale { 0.2f };
 const float v_magnitude { 200.0f };
-
+float noiseScale { 0.2f };
+unsigned int terminationCount = 300;
 
 // initialize random
 std::random_device rd;
@@ -91,6 +92,8 @@ void printKey()
 
 int main()
 {
+    // Utilities::addLine("/Users/max/UCLA/Research/Codes/Vicsek/data/v_order_param", "noise", "order param");
+
     if (renderGraphics)
     {
         if(SDL_Init(SDL_INIT_EVERYTHING)==0)
@@ -193,8 +196,19 @@ int main()
                 if (not paused)
                 {
                     swarm.updateParticles(DT);
-                    // func wrapper for "write val to file"
-                    // Utilities::addLine("path/to/file/name", val);
+                    // noiseScale = std::max<float>(noiseScale - DT / 64.0f, 0.0f);
+                    // swarm.changeNoise(noiseScale);
+                    // // std::cout << noiseScale << '\n';
+                    
+                    // if (noiseScale <= 0.0f)
+                    // {
+                    //     --terminationCount;
+                    // }
+                    
+                    // // func wrapper for "write vals to file"
+                    // Utilities::addLine("/Users/max/UCLA/Research/Codes/Vicsek/data/v_order_param_limited", noiseScale, swarm.order_param);
+                    
+                    // if (terminationCount <= 0) { break; }
                 }
                 if (step)
                 {
@@ -232,22 +246,19 @@ int main()
 
         // TODO: thread pooling
         std::cout << "Thread count: " << static_cast<int>(num_threads) << '\n';
-        for (int i = 0; i < 112; ++i)
+
+        std::vector<unsigned int> NNList{1, 2, 4, 8, 16, 24};
+        std::vector<std::thread> workers;
+        workers.reserve((NNList.size()));
+
+        for (unsigned int i = 0; i < NNList.size(); ++i)
         {
-            std::cout << '\n' << "Iteration " << i << '\n' << '\n';
-
-            std::vector<std::thread> workers;
-            workers.reserve((num_threads));
-            for (std::size_t thread_ID = 0; thread_ID < num_threads; ++thread_ID)
-            {
-                // uint32_t base_seed = rd();
-                // workers.emplace_back(&Utilities::function_name, thread_ID, base_seed, width, height, res, DT, i);
-            }
-
-            for (auto& thread : workers)
-            {
-                thread.join();
-            }
+            workers.emplace_back(&Utilities::parallelSims, width, height, triangle_scale, rd(), noiseScale, NNList[i], v_magnitude, numObjs, DT);
+        }
+        
+        for (auto& thread : workers)
+        {
+            thread.join();
         }
     }
 }
