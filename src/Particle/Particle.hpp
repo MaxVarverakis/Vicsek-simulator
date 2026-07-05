@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <random>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <glm/glm.hpp>
@@ -18,8 +19,11 @@ struct Particle
     Particle(glm::vec2 pos, float vel, float theta = 0.0f)
         : position { pos }, velocity { vel }, angle { theta } {};
 
-    void update(float dt, float x_max, float y_max)
+    void update(float dt, float x_max, float y_max, float v)
     {
+        // make sure |v| is updated to current global setting
+        velocity = v;
+
         angle = std::fmod(angle, 2.0f * PI);
         // shift to [-pi, pi]
         while (angle < -PI) { angle += 2.0f * PI; }
@@ -148,7 +152,7 @@ struct Swarm
             // enable instant 180s
             // particle.angle = angles[i];
             
-            particle.update(dt, x_max, y_max);
+            particle.update(dt, x_max, y_max, velocity);
             modelMatrices[i] = generateModelMatrix(particle);
 
             v_hat_sum += glm::vec2(glm::cos(particle.angle), glm::sin(particle.angle));
@@ -177,6 +181,4 @@ struct Swarm
         }
     }
 
-    void changeNoise(float scaleNoise) { noiseScale = scaleNoise; }
-    void changeNN(unsigned int num) { nNeighbors = num; }
 };

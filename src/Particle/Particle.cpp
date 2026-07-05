@@ -6,8 +6,9 @@ std::vector<float> Swarm::sense()
 
     for (unsigned int i = 0; i < particles.size(); ++i)
     {
-        std::vector<unsigned int> neighborIds(nNeighbors);
-        std::vector<float> distances(nNeighbors, 9999.0f);
+        unsigned int neighborIds[24] = {0}; 
+        float distances[24];
+        std::fill_n(distances, nNeighbors, 9999.0f);
 
         for (unsigned int j = 0; j < particles.size(); ++j)
         {
@@ -22,21 +23,43 @@ std::vector<float> Swarm::sense()
 
                 float distance = glm::length(delta);
 
-                unsigned int j_copy = j;
+                // unsigned int j_copy = j;
 
                 for (unsigned int k = 0; k < nNeighbors; ++k)
                 {
                     if (distance < distances[k])
                     {
                         // insert and bump
-                        unsigned int oldIdx = neighborIds[k];
-                        float oldDist = distances[k];
+                        
+                        // allegedly quickest way avoid heap something somethings
+                        float* source_start = distances + k;
+                        float* source_end   = distances + (nNeighbors - 1);
+                        float* dest_end     = distances + nNeighbors;
 
-                        neighborIds[k] = j_copy;
+                        unsigned int* id_source_start = neighborIds + k;
+                        unsigned int* id_source_end   = neighborIds + (nNeighbors - 1);
+                        unsigned int* id_dest_end     = neighborIds + nNeighbors;
+
+                        // Shift right safely using hardware-optimized memory moves
+                        std::move_backward(source_start, source_end, dest_end);
+                        std::move_backward(id_source_start, id_source_end, id_dest_end);
+
+                        // if using std::vectors
+                        // std::move_backward(distances.begin() + k, distances.end() - 1, distances.end());
+                        // std::move_backward(neighborIds.begin() + k, neighborIds.end() - 1, neighborIds.end());
+
                         distances[k] = distance;
+                        neighborIds[k] = j;
 
-                        distance = oldDist;
-                        j_copy = oldIdx;
+                        // recursive "manual" method
+                        // unsigned int oldIdx = neighborIds[k];
+                        // float oldDist = distances[k];
+
+                        // neighborIds[k] = j_copy;
+                        // distances[k] = distance;
+
+                        // distance = oldDist;
+                        // j_copy = oldIdx;
                     }
                 }
             }

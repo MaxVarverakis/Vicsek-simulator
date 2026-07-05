@@ -12,6 +12,11 @@
 #include "VertexBufferLayout/VertexBufferLayout.hpp"
 #include "Triangle/Triangle.hpp"
 
+// ImGui stuff here
+#include "imgui.h"
+#include "imgui_impl_sdl2.h"
+#include "imgui_impl_opengl3.h"
+
 // project-specific includes go here
 #include "Particle/Particle.hpp"
 #include "Utilities/Utilities.hpp"
@@ -37,7 +42,7 @@ const float triangle_scale { 5.0f };
 const unsigned int numObjs { 200 };
 const unsigned int neighborCount { 5 };
 const float DT { 0.025f };
-const float v_magnitude { 200.0f };
+float v_magnitude { 200.0f };
 float noiseScale { 0.2f };
 unsigned int terminationCount = 300;
 
@@ -90,6 +95,65 @@ void printKey()
     std::cout << "###################################" << '\n' << '\n';
 }
 
+void imguiWindow(ImGuiIO& io, Swarm& swarm)
+{
+    ImGui::Begin("Swarm Control Center");
+
+    // Simulation Play/Pause State
+    if (paused) {
+        if (ImGui::Button("Resume Simulation", ImVec2(150, 0))) { paused = false; }
+    } else {
+        if (ImGui::Button("Pause Simulation", ImVec2(150, 0))) { paused = true; }
+    }
+    
+    ImGui::SameLine();
+    if (ImGui::Button("Step Forward")) { step = true; }
+    
+    ImGui::SameLine();
+    if (ImGui::Button("Quit")) { is_running = false; }
+
+    ImGui::Separator();
+
+    // Live Parameter Tuning
+    // Note: We expose &noiseScale directly since it controls the swarm logic
+    ImGui::Text("Physics Parameters:");
+    ImGui::SliderFloat("Noise Scale (Eta)", &noiseScale, 0.0f, 1.0f, "%.3f");
+    ImGui::SliderFloat("Velocity Mag (|v|)", &v_magnitude, 0.0f, 1000.0f, "%.0f");
+    
+    // If you want to view information about your swarm
+    ImGui::Text("Particle Count: %u", numObjs);
+
+    ImGui::Separator();
+
+    // Real-Time Performance Overlays
+    ImGui::Text("Application Metrics:");
+    ImGui::Text("Frame Rate: %.1f FPS", io.Framerate);
+
+    ImGui::Separator();
+
+    // velocity order parameter
+    // Maintain a static rolling buffer of historical data (e.g., last 200 frames)
+    const int HISTORY_SIZE = 200;
+    static float phi_history[HISTORY_SIZE] = { 0.0f };
+    
+    if (!paused)
+    {
+        // shift by one to make space for new value
+        for (int i = 0; i < HISTORY_SIZE - 1; ++i)
+        {
+            phi_history[i] = phi_history[i+1];
+        }
+
+        phi_history[HISTORY_SIZE - 1] = swarm.order_param;
+    }
+
+    // Render the scrolling line graph
+    // Arguments: Label, data array, array size, values offset, overlay text, min value, max value, graph size
+    ImGui::PlotLines("##PhiGraph", phi_history, HISTORY_SIZE, 0, "Global Order (Phi)", 0.0f, 1.0f, ImVec2(0, 100));
+    
+    ImGui::End();
+}
+
 int main()
 {
     // Utilities::addLine("/Users/max/UCLA/Research/Codes/Vicsek/data/v_order_param", "noise", "order param");
@@ -104,6 +168,16 @@ int main()
             window = SDL_CreateWindow("Window Title", 0.0f, 0.0f, static_cast<int>(width), static_cast<int>(height), SDL_WINDOW_OPENGL);
             gl_context = SDL_GL_CreateContext(window);
             SDL_GL_SetSwapInterval(1);
+
+            // Setup Dear ImGui context
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+            ImGuiIO& io = ImGui::GetIO();
+            io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+
+            // Setup Platform/Renderer backends
+            ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+            ImGui_ImplOpenGL3_Init();
 
             if(glewInit() == GLEW_OK)
             {
@@ -184,6 +258,9 @@ int main()
             {
                 while(SDL_PollEvent(&event))
                 {
+                    // (Where your code calls SDL_PollEvent())
+                    ImGui_ImplSDL2_ProcessEvent(&event); // Forward your event to backend
+
                     if( event.type == SDL_QUIT || (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) )
                     {
                         is_running = false;
@@ -192,12 +269,21 @@ int main()
                     evolveTime(event);
                 }
 
+                // (After event loop)
+                // Start the Dear ImGui frame
+                ImGui_ImplOpenGL3_NewFrame();
+                ImGui_ImplSDL2_NewFrame();
+                ImGui::NewFrame();
+                imguiWindow(io, swarm);
+
                 // evolve time if unpaused
                 if (not paused)
                 {
+                    swarm.velocity = v_magnitude;
+                    swarm.noiseScale = noiseScale;
                     swarm.updateParticles(DT);
                     // noiseScale = std::max<float>(noiseScale - DT / 64.0f, 0.0f);
-                    // swarm.changeNoise(noiseScale);
+                    // swarm.noiseScale = noiseScale;
                     // // std::cout << noiseScale << '\n';
                     
                     // if (noiseScale <= 0.0f)
@@ -212,6 +298,8 @@ int main()
                 }
                 if (step)
                 {
+                    swarm.velocity = v_magnitude;
+                    swarm.noiseScale = noiseScale;
                     swarm.updateParticles(DT);
                     step = false;
                 }
@@ -227,9 +315,18 @@ int main()
                 // draw objects
                 renderer.drawTriangles(tri_VAO, tri_IBO, tri_shader, static_cast<int>(numObjs));
 
+                // Dear ImGui Rendering
+                // (Your code clears your framebuffer, renders your other stuff etc.)
+                ImGui::Render();
+                ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+                // (Your code calls SDL_GL_SwapWindow() etc.)
+
                 SDL_GL_SwapWindow(window);
             }
 
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplSDL2_Shutdown();
+            ImGui::DestroyContext();
             SDL_Quit();
         }
         else

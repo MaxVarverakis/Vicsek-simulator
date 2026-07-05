@@ -39,7 +39,7 @@ void Utilities::parallelSims(float width, float height, float scaleFactor, uint3
     {
         swarm.updateParticles(dt);
         scaleNoise = std::max<float>(scaleNoise - dt / 64.0f, 0.0f);
-        swarm.changeNoise(scaleNoise);
+        swarm.noiseScale = scaleNoise;
         
         if (scaleNoise<= 0.0f)
         {
