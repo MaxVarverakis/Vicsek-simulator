@@ -1,5 +1,8 @@
 #pragma once
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/color_space.hpp>
+
 #include <iostream>
 #include <vector>
 #include <random>
@@ -24,10 +27,8 @@ struct Particle
         // make sure |v| is updated to current global setting
         velocity = v;
 
-        angle = std::fmod(angle, 2.0f * PI);
         // shift to [-pi, pi]
-        while (angle < -PI) { angle += 2.0f * PI; }
-        while (angle > PI) { angle -= 2.0f * PI; }
+        angle = std::remainderf(angle, 2.0f * PI);
 
         position += velocity * glm::vec2(glm::cos(angle), glm::sin(angle)) * dt;
         applyPeriodicBC(x_max, y_max);
@@ -162,7 +163,7 @@ struct Swarm
             particle.update(dt, x_max, y_max, velocity);
             modelMatrices[i] = generateModelMatrix(particle);
 
-            if (colors_bool) { colors[i] = angle_to_color(particle.angle); }
+            if (colors_bool) { colors[i] = cycle_angle_to_color(particle.angle); }
 
             v_hat_sum += glm::vec2(glm::cos(particle.angle), glm::sin(particle.angle));
         }
@@ -190,16 +191,23 @@ struct Swarm
         }
     }
 
-    glm::vec4 angle_to_color(float angle)
+    glm::vec4 bwr_angle_to_color(float angle)
     {
-        // TODO: different color for all angles (color wheel style)
-        
         // red  = + pi / 2
         // blue = - pi / 2
         
         float r = std::clamp<float>(2.0f * fabsf(angle / PI + 0.5f), 0.0f, 1.0f);
         float g = 2.0f * abs(abs(angle) / PI - 0.5f);
         float b = std::clamp<float>(2.0f * fabsf(angle / PI - 0.5f), 0.0f, 1.0f);
+
+        return glm::vec4(r, g, b, 1.0f);
+    }
+
+    glm::vec4 cycle_angle_to_color(float angle)
+    {
+        float r = glm::sin(angle) * 0.5f + 0.5f;
+        float g = glm::sin(angle + 2.0f * PI / 3.0f) * 0.5f + 0.5f;
+        float b = glm::sin(angle + 4.0f * PI / 3.0f) * 0.5f + 0.5f;
 
         return glm::vec4(r, g, b, 1.0f);
     }

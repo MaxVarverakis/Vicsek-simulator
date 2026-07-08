@@ -32,8 +32,9 @@ bool is_running;
 bool paused { true };
 bool step { false };
 
-const float width { 1440.0f };
-const float height { 846.0f };
+const float world_scale { 1.0f };
+const float width { 1440.0f / world_scale };
+const float height { 846.0f / world_scale };
 
 
 // project-specific settings
@@ -46,6 +47,7 @@ float v_magnitude { 200.0f };
 float noiseScale { 0.2f };
 unsigned int terminationCount = 300;
 bool color { false };
+bool ui_collapsed { false };
 
 static const std::vector<glm::vec4> defaultColors(numObjs, glm::vec4(1.0f));
 
@@ -72,18 +74,26 @@ void evolveTime(SDL_Event& event)
 {
     if (event.type == SDL_KEYDOWN)
     {
-        if (event.key.keysym.scancode == SDL_SCANCODE_SPACE)
+        switch (event.key.keysym.sym)
         {
-            paused = paused ? false : true;
+            case SDLK_ESCAPE:
+                is_running = false;
+                break;
+            case SDLK_SPACE:
+                paused = !paused;
+                break;
+            case SDLK_RIGHT:
+                step = true;
+                break;
+            case SDLK_c:
+                color = !color;
+                break;
+            case SDLK_m:
+                ui_collapsed = ! ui_collapsed;
+                break;
+            default:
+                break;
         }
-        else if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT)
-        {
-            step = true;
-        }
-        // else if (event.key.keysym.scancode == SDL_SCANCODE_LEFT)
-        // {
-        //     GLOBAL_TIME < DT ? GLOBAL_TIME = 0.0 : GLOBAL_TIME -= DT; // prevent negative time
-        // }
     }
 }
 
@@ -100,7 +110,12 @@ void printKey()
 
 void imguiWindow(ImGuiIO& io, Swarm& swarm)
 {
+    ImGui::SetNextWindowCollapsed(ui_collapsed, ImGuiCond_Always);
+
     ImGui::Begin("Swarm Control Center");
+
+    // keep bool synced with ui state
+    ui_collapsed = ImGui::IsWindowCollapsed();
 
     // Simulation Play/Pause State
     if (paused) {
@@ -272,7 +287,11 @@ int main()
                     // (Where your code calls SDL_PollEvent())
                     ImGui_ImplSDL2_ProcessEvent(&event); // Forward your event to backend
 
-                    if( event.type == SDL_QUIT || (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) )
+                    if (event.type == SDL_QUIT)
+                    {
+                        is_running = false;
+                    }
+                    if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
                     {
                         is_running = false;
                     }
