@@ -57,8 +57,10 @@ struct Swarm
     float velocity;
     std::vector<Particle> particles;
     std::vector<glm::mat4> modelMatrices;
-
+    
     float order_param;
+    bool colors_bool;
+    std::vector<glm::vec4> colors;
 
     void print()
     {
@@ -130,6 +132,11 @@ struct Swarm
     
     void updateParticles(float dt)
     {
+        if (colors_bool && (colors.size() < particles.size()))
+        {
+            colors.resize(particles.size(), glm::vec4(1.0f));
+        }
+
         glm::vec2 v_hat_sum(0.0f);
 
         // I'm a little skeptical on doing this rather than just 
@@ -154,6 +161,8 @@ struct Swarm
             
             particle.update(dt, x_max, y_max, velocity);
             modelMatrices[i] = generateModelMatrix(particle);
+
+            if (colors_bool) { colors[i] = angle_to_color(particle.angle); }
 
             v_hat_sum += glm::vec2(glm::cos(particle.angle), glm::sin(particle.angle));
         }
@@ -181,4 +190,17 @@ struct Swarm
         }
     }
 
+    glm::vec4 angle_to_color(float angle)
+    {
+        // TODO: different color for all angles (color wheel style)
+        
+        // red  = + pi / 2
+        // blue = - pi / 2
+        
+        float r = std::clamp<float>(2.0f * fabsf(angle / PI + 0.5f), 0.0f, 1.0f);
+        float g = 2.0f * abs(abs(angle) / PI - 0.5f);
+        float b = std::clamp<float>(2.0f * fabsf(angle / PI - 0.5f), 0.0f, 1.0f);
+
+        return glm::vec4(r, g, b, 1.0f);
+    }
 };

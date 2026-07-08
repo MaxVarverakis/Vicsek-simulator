@@ -45,6 +45,9 @@ const float DT { 0.025f };
 float v_magnitude { 200.0f };
 float noiseScale { 0.2f };
 unsigned int terminationCount = 300;
+bool color { false };
+
+static const std::vector<glm::vec4> defaultColors(numObjs, glm::vec4(1.0f));
 
 // initialize random
 std::random_device rd;
@@ -120,7 +123,10 @@ void imguiWindow(ImGuiIO& io, Swarm& swarm)
     ImGui::SliderFloat("Noise Scale (Eta)", &noiseScale, 0.0f, 1.0f, "%.3f");
     ImGui::SliderFloat("Velocity Mag (|v|)", &v_magnitude, 0.0f, 1000.0f, "%.0f");
     
-    // If you want to view information about your swarm
+    // modify agent colors
+    ImGui::Checkbox("Angle-based colors", &color);
+    
+    // swarm info
     ImGui::Text("Particle Count: %u", numObjs);
 
     ImGui::Separator();
@@ -226,7 +232,12 @@ int main()
             tri_VAO.addBuffer(tri_VBO, tri_layout);
 
             VertexBuffer instanceVBO(swarm.modelMatrices.data(), static_cast<unsigned int>(swarm.modelMatrices.size() * sizeof(glm::mat4)), GL_DYNAMIC_DRAW);
-            tri_VAO.addInstancedBuffer(instanceVBO, 2);
+            tri_VAO.addInstancedBuffer(instanceVBO, 2, 16);
+
+            swarm.colors.resize(numObjs, glm::vec4(1.0f));
+            VertexBuffer colorInstanceVBO(swarm.colors.data(), static_cast<unsigned int>(swarm.colors.size() * sizeof(glm::vec4)), GL_DYNAMIC_DRAW);
+            // add to slot 6 since the instance mat4's take up 4 slots (2, 3, 4, 5)
+            tri_VAO.addInstancedBuffer(colorInstanceVBO, 6, 4);
 
             // constructor automatically binds buffer
             IndexBuffer tri_IBO(triangles.m_indices.data(), static_cast<unsigned int>(triangles.m_indices.size()));
@@ -303,12 +314,25 @@ int main()
                     swarm.updateParticles(DT);
                     step = false;
                 }
+                
+                // always update colors even if paused
+                swarm.colors_bool = color;
 
                 // updating and rendering stuff happens here
                 
-                // update buffers (circle position, color, alpha)
-                // triangles.updateColors(values);
+                // update buffers (position, color, alpha)
+                if (color)
+                {
+                    // triangles.udpateColors(swarm.colors);
+                    colorInstanceVBO.updateBuffer(swarm.colors.data());
+                }
+                else
+                {
+                    colorInstanceVBO.updateBuffer(defaultColors.data());
+                }
+
                 instanceVBO.updateBuffer(swarm.modelMatrices.data());
+
 
                 renderer.clear();
 

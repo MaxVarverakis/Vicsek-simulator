@@ -35,5 +35,5 @@ namespace Utilities
     }
 
     void parallelSims(float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles, const float dt);
-
+    
 }
