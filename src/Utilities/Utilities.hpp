@@ -1,11 +1,16 @@
 #pragma once
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/color_space.hpp>
+
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <vector>
 
-#include "../Particle/Particle.hpp"
+// currently no need to forward declare Swarm struct!
+
+static const float PI { std::acosf(-1.0f) };
 
 namespace Utilities
 {
@@ -36,4 +41,7 @@ namespace Utilities
 
     void parallelSims(float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles, const float dt);
     
+    glm::vec4 bwr_angle_to_color(float angle);
+    glm::vec4 cycle_angle_to_color(float angle);
+
 }

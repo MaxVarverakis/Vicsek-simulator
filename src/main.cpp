@@ -18,7 +18,7 @@
 #include "imgui_impl_opengl3.h"
 
 // project-specific includes go here
-#include "Particle/Particle.hpp"
+#include "Swarm/Swarm.hpp"
 #include "Utilities/Utilities.hpp"
 
 SDL_Window* window;
@@ -33,6 +33,7 @@ bool paused { true };
 bool step { false };
 
 const float world_scale { 1.0f };
+// DEFINE TARGET W,H AND THE TRUE VALUES WILL COME FROM SHG
 const float width { 1440.0f / world_scale };
 const float height { 846.0f / world_scale };
 

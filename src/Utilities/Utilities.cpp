@@ -1,5 +1,8 @@
 #include "Utilities.hpp"
 
+#include "../Swarm/Swarm.hpp"
+
+
 void Utilities::singleColumnData(const std::string& filename, const std::vector<double>& data)
 {
     std::ofstream outFile(filename + ".txt");
@@ -54,4 +57,25 @@ void Utilities::parallelSims(float width, float height, float scaleFactor, uint3
         
         if (terminationCount <= 0) { break; }
     }
+}
+
+glm::vec4 Utilities::bwr_angle_to_color(float angle)
+{
+    // red  = + pi / 2
+    // blue = - pi / 2
+    
+    float r = std::clamp<float>(2.0f * fabsf(angle / PI + 0.5f), 0.0f, 1.0f);
+    float g = 2.0f * fabsf(fabsf(angle) / PI - 0.5f);
+    float b = std::clamp<float>(2.0f * fabsf(angle / PI - 0.5f), 0.0f, 1.0f);
+
+    return glm::vec4(r, g, b, 1.0f);
+}
+
+glm::vec4 Utilities::cycle_angle_to_color(float angle)
+{
+    float r = glm::sin(angle) * 0.5f + 0.5f;
+    float g = glm::sin(angle + 2.0f * PI / 3.0f) * 0.5f + 0.5f;
+    float b = glm::sin(angle + 4.0f * PI / 3.0f) * 0.5f + 0.5f;
+
+    return glm::vec4(r, g, b, 1.0f);
 }

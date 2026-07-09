@@ -1,8 +1,5 @@
 #pragma once
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/color_space.hpp>
-
 #include <iostream>
 #include <vector>
 #include <random>
@@ -12,40 +9,40 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-static const float PI { std::acosf(-1.0f) };
-
-struct Particle
-{
-    glm::vec2 position;
-    float velocity, angle; // angle in radians
-
-    Particle(glm::vec2 pos, float vel, float theta = 0.0f)
-        : position { pos }, velocity { vel }, angle { theta } {};
-
-    void update(float dt, float x_max, float y_max, float v)
-    {
-        // make sure |v| is updated to current global setting
-        velocity = v;
-
-        // shift to [-pi, pi]
-        angle = std::remainderf(angle, 2.0f * PI);
-
-        position += velocity * glm::vec2(glm::cos(angle), glm::sin(angle)) * dt;
-        applyPeriodicBC(x_max, y_max);
-    }
-
-    void applyPeriodicBC(float x_max, float y_max)
-    {
-        while (position.x > x_max) { position.x -= x_max; }
-        while (position.x < 0.0f) { position.x += x_max; }
-        
-        while (position.y > y_max) { position.y -= y_max; }
-        while (position.y < 0.0f) { position.y += y_max; }
-    }
-};
+#include "../Utilities/Utilities.hpp"
 
 struct Swarm
 {
+    struct Particle
+    {
+        glm::vec2 position;
+        float velocity, angle; // angle in radians
+
+        Particle(glm::vec2 pos, float vel, float theta = 0.0f)
+            : position { pos }, velocity { vel }, angle { theta } {};
+
+        void update(float dt, float x_max, float y_max, float v)
+        {
+            // make sure |v| is updated to current global setting
+            velocity = v;
+
+            // shift to [-pi, pi]
+            angle = std::remainderf(angle, 2.0f * PI);
+
+            position += velocity * glm::vec2(glm::cos(angle), glm::sin(angle)) * dt;
+            applyPeriodicBC(x_max, y_max);
+        }
+
+        void applyPeriodicBC(float x_max, float y_max)
+        {
+            while (position.x > x_max) { position.x -= x_max; }
+            while (position.x < 0.0f) { position.x += x_max; }
+            
+            while (position.y > y_max) { position.y -= y_max; }
+            while (position.y < 0.0f) { position.y += y_max; }
+        }
+    };
+
     float x_max, y_max;
     float scale;
     uint32_t master_seed;
@@ -63,7 +60,7 @@ struct Swarm
     bool colors_bool;
     std::vector<glm::vec4> colors;
 
-    void print()
+    void printParticleData()
     {
         for (Particle& particle : particles)
         {
@@ -163,7 +160,7 @@ struct Swarm
             particle.update(dt, x_max, y_max, velocity);
             modelMatrices[i] = generateModelMatrix(particle);
 
-            if (colors_bool) { colors[i] = cycle_angle_to_color(particle.angle); }
+            if (colors_bool) { colors[i] = Utilities::cycle_angle_to_color(particle.angle); }
 
             v_hat_sum += glm::vec2(glm::cos(particle.angle), glm::sin(particle.angle));
         }
@@ -191,24 +188,5 @@ struct Swarm
         }
     }
 
-    glm::vec4 bwr_angle_to_color(float angle)
-    {
-        // red  = + pi / 2
-        // blue = - pi / 2
-        
-        float r = std::clamp<float>(2.0f * fabsf(angle / PI + 0.5f), 0.0f, 1.0f);
-        float g = 2.0f * abs(abs(angle) / PI - 0.5f);
-        float b = std::clamp<float>(2.0f * fabsf(angle / PI - 0.5f), 0.0f, 1.0f);
-
-        return glm::vec4(r, g, b, 1.0f);
-    }
-
-    glm::vec4 cycle_angle_to_color(float angle)
-    {
-        float r = glm::sin(angle) * 0.5f + 0.5f;
-        float g = glm::sin(angle + 2.0f * PI / 3.0f) * 0.5f + 0.5f;
-        float b = glm::sin(angle + 4.0f * PI / 3.0f) * 0.5f + 0.5f;
-
-        return glm::vec4(r, g, b, 1.0f);
-    }
+    
 };
