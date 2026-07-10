@@ -9,40 +9,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "../Utilities/Utilities.hpp"
+#include "../Particle/Particle.hpp"
+#include "../SpatialHashGrid/SpatialHashGrid.hpp"
 
 struct Swarm
 {
-    struct Particle
-    {
-        glm::vec2 position;
-        float velocity, angle; // angle in radians
-
-        Particle(glm::vec2 pos, float vel, float theta = 0.0f)
-            : position { pos }, velocity { vel }, angle { theta } {};
-
-        void update(float dt, float x_max, float y_max, float v)
-        {
-            // make sure |v| is updated to current global setting
-            velocity = v;
-
-            // shift to [-pi, pi]
-            angle = std::remainderf(angle, 2.0f * PI);
-
-            position += velocity * glm::vec2(glm::cos(angle), glm::sin(angle)) * dt;
-            applyPeriodicBC(x_max, y_max);
-        }
-
-        void applyPeriodicBC(float x_max, float y_max)
-        {
-            while (position.x > x_max) { position.x -= x_max; }
-            while (position.x < 0.0f) { position.x += x_max; }
-            
-            while (position.y > y_max) { position.y -= y_max; }
-            while (position.y < 0.0f) { position.y += y_max; }
-        }
-    };
-
+    SpatialHashGrid grid;
     float x_max, y_max;
     float scale;
     uint32_t master_seed;
@@ -53,6 +25,9 @@ struct Swarm
     // perhaps having separate position and angle vectors rather than particle vector would be faster
     unsigned int nNeighbors;
     float velocity;
+
+    std::vector<unsigned int> scratch_neighborIds;
+    std::vector<float> scratch_distances;
     std::vector<Particle> particles;
     std::vector<glm::mat4> modelMatrices;
     
@@ -60,30 +35,36 @@ struct Swarm
     bool colors_bool;
     std::vector<glm::vec4> colors;
 
-    void printParticleData()
+    void printParticleInfo()
     {
-        for (Particle& particle : particles)
+        for (unsigned int i = 0; i < particles.size(); ++i)
         {
-            std::cout << "x" << '\t' << particle.position.x << '\n';
-            std::cout << "y" << '\t' << particle.position.y << '\n';
-            std::cout << "a" << '\t' << particle.angle << '\n';
+            Particle& particle = particles[i];
+            std::cout << "idx" << '\t' << i << '\n';
+            particle.printInfo();
             std::cout << '\n';
         }
     }
 
-    Swarm(float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v)
-        : x_max { width }
-        , y_max { height }
+    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v)
+        : grid(cellSize, width, height)
+        , x_max { cellSize * grid.nX }
+        , y_max { cellSize * grid.nY }
         , scale { scaleFactor }
         , master_seed { seed }
         , rng(seed)
         , noiseScale { scaleNoise }
         , nNeighbors { neighborCount }
-        , velocity { v } {};
+        , velocity { v }
+    {
+        scratch_neighborIds.resize(nNeighbors, 0);
+        scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
+    };
     
-    Swarm(float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, std::vector<Particle> pts)
-        : x_max { width }
-        , y_max { height }
+    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, std::vector<Particle> pts)
+        : grid(cellSize, width, height)
+        , x_max { cellSize * grid.nX }
+        , y_max { cellSize * grid.nY }
         , scale { scaleFactor }
         , master_seed { seed }
         , rng(seed)
@@ -91,11 +72,16 @@ struct Swarm
         , nNeighbors { neighborCount }
         , velocity { v }
         , particles { pts }
-        { generateModelMatrices(); }
+    {
+        generateModelMatrices();
+        scratch_neighborIds.resize(nNeighbors, 0);
+        scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
+    }
     
-    Swarm(float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles)
-        : x_max { width }
-        , y_max { height }
+    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles)
+        : grid(cellSize, width, height)
+        , x_max { cellSize * grid.nX }
+        , y_max { cellSize * grid.nY }
         , scale { scaleFactor }
         , master_seed { seed }
         , rng(seed)
@@ -104,6 +90,8 @@ struct Swarm
         , velocity { v }
     {
         particles.reserve(numParticles);
+        scratch_neighborIds.resize(nNeighbors, 0);
+        scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
 
         // generate random particles
         for (unsigned int i = 0; i < numParticles; ++i)
@@ -141,6 +129,8 @@ struct Swarm
         // setting a max angle change outright
         const float max_turn_speed = 2.0f * PI;
 
+        // build the sorted gridParticles of SHG before sensing!
+        grid.build(particles);
         std::vector<float> angles { sense() };
 
         for (unsigned int i = 0; i < particles.size(); ++i)

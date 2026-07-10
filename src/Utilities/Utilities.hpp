@@ -39,7 +39,7 @@ namespace Utilities
         outFile.close();
     }
 
-    void parallelSims(float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles, const float dt);
+    void parallelSims(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles, const float dt);
     
     glm::vec4 bwr_angle_to_color(float angle);
     glm::vec4 cycle_angle_to_color(float angle);

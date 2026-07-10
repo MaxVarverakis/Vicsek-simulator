@@ -19,7 +19,6 @@
 
 // project-specific includes go here
 #include "Swarm/Swarm.hpp"
-#include "Utilities/Utilities.hpp"
 
 SDL_Window* window;
 SDL_GLContext gl_context;
@@ -33,22 +32,23 @@ bool paused { true };
 bool step { false };
 
 const float world_scale { 1.0f };
-// DEFINE TARGET W,H AND THE TRUE VALUES WILL COME FROM SHG
-const float width { 1440.0f / world_scale };
-const float height { 846.0f / world_scale };
+
+const float cellSize { 50.0f }; // side length of square cell
+const float targetWidth { 1440.0f / world_scale };
+const float targetHeight { 846.0f / world_scale };
 
 
 // project-specific settings
 // const float triangle_scale { 1 / 64.0f };
 const float triangle_scale { 5.0f };
-const unsigned int numObjs { 200 };
+const unsigned int numObjs { 400 };
 const unsigned int neighborCount { 5 };
 const float DT { 0.025f };
 float v_magnitude { 200.0f };
 float noiseScale { 0.2f };
 unsigned int terminationCount = 300;
 bool color { false };
-bool ui_collapsed { false };
+bool ui_collapsed { true };
 
 static const std::vector<glm::vec4> defaultColors(numObjs, glm::vec4(1.0f));
 
@@ -187,6 +187,12 @@ int main()
             std::cout<<"SDL2 initialized successfully."<<std::endl;
             set_sdl_gl_attributes();
             
+            // initialize swarm up here so that we can use the SHG-adjusted width/height to fit the window perfectly
+            // specifying the number of agents automatically generates random particles
+            Swarm swarm(cellSize, targetWidth, targetHeight, triangle_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs);
+            const float width = swarm.x_max;
+            const float height = swarm.y_max;
+
             window = SDL_CreateWindow("Window Title", 0.0f, 0.0f, static_cast<int>(width), static_cast<int>(height), SDL_WINDOW_OPENGL);
             gl_context = SDL_GL_CreateContext(window);
             SDL_GL_SetSwapInterval(1);
@@ -217,9 +223,6 @@ int main()
             GLCall(glEnable(GL_MULTISAMPLE));
 
             printKey();
-
-            // specifying the number of agents automatically generates random particles
-            Swarm swarm(width, height, triangle_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs);
 
             // buffer stuff and initialization happens here
             std::vector<Triangle> tris;
@@ -394,7 +397,7 @@ int main()
 
         for (unsigned int i = 0; i < NNList.size(); ++i)
         {
-            workers.emplace_back(&Utilities::parallelSims, width, height, triangle_scale, rd(), noiseScale, NNList[i], v_magnitude, numObjs, DT);
+            workers.emplace_back(&Utilities::parallelSims, cellSize, targetWidth, targetHeight, triangle_scale, rd(), noiseScale, NNList[i], v_magnitude, numObjs, DT);
         }
         
         for (auto& thread : workers)
