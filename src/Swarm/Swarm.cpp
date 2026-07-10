@@ -1,9 +1,7 @@
 #include "Swarm.hpp"
 
-std::vector<float> Swarm::sense()
+void Swarm::sense()
 {
-    std::vector<float> angles(particles.size());
-
     for (unsigned int i = 0; i < particles.size(); ++i)
     {
         std::fill(scratch_neighborIds.begin(), scratch_neighborIds.end(), 0);
@@ -15,14 +13,14 @@ std::vector<float> Swarm::sense()
 
         while (true)
         {
-            std::vector<unsigned int> cellsToScan = grid.getCellsAtLevel(homeCell, level, i);
+            grid.getCellsAtLevel(homeCell, level, i);
 
-            if (cellsToScan.empty() || level > std::max(grid.nX, grid.nY) / 2) 
+            if (grid.outCells.empty() || level > std::max(grid.nX, grid.nY) / 2) 
             {
                 break;
             }
 
-            for (unsigned int cellID : cellsToScan)
+            for (unsigned int cellID : grid.outCells)
             {
                 unsigned int start = grid.cellOffsets[cellID    ];
                 unsigned int end   = grid.cellOffsets[cellID + 1];
@@ -105,10 +103,8 @@ std::vector<float> Swarm::sense()
             }
         }
         
-        angles[i] = glm::atan(sinSum, cosSum) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
+        targetAngles[i] = glm::atan(sinSum, cosSum) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
     }
-
-    return angles;
 }
 
 std::vector<float> Swarm::tradSense()
@@ -125,11 +121,12 @@ std::vector<float> Swarm::tradSense()
         unsigned int homeCell = grid.hash(particles[i]);
 
         // homeCell is include in neighbors vector
-        std::vector<unsigned int> cellsToScan = grid.getCellsAtLevel(homeCell, 0, i);
-        std::vector<unsigned int> neighborCells = grid.getCellsAtLevel(homeCell, 1, i);
-        cellsToScan.insert(cellsToScan.end(), neighborCells.begin(), neighborCells.end());
+        grid.getCellsAtLevel(homeCell, 0, i);
+        std::vector<unsigned int> neighborCells = grid.outCells;
+        grid.getCellsAtLevel(homeCell, 1, i);
+        neighborCells.insert(neighborCells.end(), grid.outCells.begin(), grid.outCells.end());
 
-        for (unsigned int cellID : cellsToScan)
+        for (unsigned int cellID : neighborCells)
         {
             unsigned int start = grid.cellOffsets[cellID    ];
             unsigned int end   = grid.cellOffsets[cellID + 1];

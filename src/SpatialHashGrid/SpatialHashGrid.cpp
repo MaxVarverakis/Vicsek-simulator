@@ -7,6 +7,7 @@ SpatialHashGrid::SpatialHashGrid(float size, float width, float height)
     , numCells { nX * nY }
 {
     cellOffsets.resize(numCells + 1);
+    offsetCopy.reserve(numCells + 1);
     scannedCells.resize(numCells);
 }
 
@@ -63,7 +64,7 @@ void SpatialHashGrid::build(const std::vector<Particle>& particles)
 
     // sort particle IDs based on cell
     // create temporary copy so that the offsets array remains intact
-    std::vector<unsigned int> offsetCopy = cellOffsets;
+    offsetCopy = cellOffsets;
     for (unsigned int i = 0; i < gridParticles.size(); ++i)
     {
         // `a++` means that offset is set to `a` and then `a` is incremented
@@ -101,9 +102,9 @@ std::vector<unsigned int> SpatialHashGrid::neighbors(unsigned int cellID)
     return { w, e, n, s, nw, ne, sw, se };
 }
 
-std::vector<unsigned int> SpatialHashGrid::getCellsAtLevel(unsigned int cellID, unsigned int level, unsigned int particleIdx)
+void SpatialHashGrid::getCellsAtLevel(unsigned int cellID, unsigned int level, unsigned int particleIdx)
 {
-    std::vector<unsigned int> cells;
+    outCells.clear();
 
     // un-flatten home cell coordinates (row-major)
     int X = static_cast<int>(cellID % nX);
@@ -112,8 +113,8 @@ std::vector<unsigned int> SpatialHashGrid::getCellsAtLevel(unsigned int cellID, 
     // handle home cell special case
     if (level == 0)
     {
-        cells.push_back(cellID);
-        return cells;
+        outCells.push_back(cellID);
+        return;
     }
 
     int iLevel = static_cast<int>(level);
@@ -156,10 +157,8 @@ std::vector<unsigned int> SpatialHashGrid::getCellsAtLevel(unsigned int cellID, 
             if (scannedCells[targetCell] != stamp)
             {
                 scannedCells[targetCell] = stamp; // flag to avoid double dipping
-                cells.push_back(targetCell);
+                outCells.push_back(targetCell);
             }
         }
     }
-
-    return cells;
 }

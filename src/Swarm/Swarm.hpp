@@ -28,6 +28,7 @@ struct Swarm
 
     std::vector<unsigned int> scratch_neighborIds;
     std::vector<float> scratch_distances;
+    std::vector<float> targetAngles;
     std::vector<Particle> particles;
     std::vector<glm::mat4> modelMatrices;
     
@@ -90,6 +91,7 @@ struct Swarm
         , velocity { v }
     {
         particles.reserve(numParticles);
+        targetAngles.resize(numParticles);
         scratch_neighborIds.resize(nNeighbors, 0);
         scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
 
@@ -112,7 +114,7 @@ struct Swarm
         modelMatrices.emplace_back(generateModelMatrix(particle));
     }
     
-    std::vector<float> sense();
+    void sense();
     
     std::vector<float> tradSense();
     
@@ -131,21 +133,21 @@ struct Swarm
 
         // build the sorted gridParticles of SHG before sensing!
         grid.build(particles);
-        std::vector<float> angles { sense() };
+        sense();
 
         for (unsigned int i = 0; i < particles.size(); ++i)
         {
             Particle& particle { particles[i] };
 
             // prevent instant 180s
-            float angleChange = angles[i] - particle.angle;
+            float angleChange = targetAngles[i] - particle.angle;
             while (angleChange < -PI) { angleChange += 2.0f * PI; }
             while (angleChange > PI) { angleChange -= 2.0f * PI; }
             float max_angle_change = max_turn_speed * dt;
             particle.angle += glm::clamp(angleChange, -max_angle_change, max_angle_change);
 
             // enable instant 180s
-            // particle.angle = angles[i];
+            // particle.angle = targetAngles[i];
             
             particle.update(dt, x_max, y_max, velocity);
             modelMatrices[i] = generateModelMatrix(particle);

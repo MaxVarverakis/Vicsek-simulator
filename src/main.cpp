@@ -41,7 +41,7 @@ const float targetHeight { 846.0f / world_scale };
 // project-specific settings
 // const float triangle_scale { 1 / 64.0f };
 const float triangle_scale { 5.0f };
-const unsigned int numObjs { 400 };
+const unsigned int numObjs { 1000 };
 const unsigned int neighborCount { 5 };
 const float DT { 0.025f };
 float v_magnitude { 200.0f };
@@ -284,8 +284,16 @@ int main()
             SDL_Event event;
             is_running = true;
 
+            // Uint64 lastTime = SDL_GetPerformanceCounter();
+
             while(is_running)
             {
+                // Calculate dynamic dt at the very start of the frame
+                // Uint64 currentTime = SDL_GetPerformanceCounter();
+                // float dt = static_cast<float>(currentTime - lastTime) / static_cast<float>(SDL_GetPerformanceFrequency());
+                // lastTime = currentTime;
+                // if (dt > 0.1f) dt = 0.1f;
+
                 while(SDL_PollEvent(&event))
                 {
                     // (Where your code calls SDL_PollEvent())
