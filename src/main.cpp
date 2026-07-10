@@ -3,6 +3,7 @@
 #include <random>
 #include <thread>
 #include <iomanip>
+#include <chrono>
 
 // OpenGL helpers
 #include "VertexBuffer/VertexBuffer.hpp"
@@ -33,15 +34,15 @@ bool step { false };
 
 const float world_scale { 1.0f };
 
-const float cellSize { 50.0f }; // side length of square cell
+const float cellSize { 50.0f / world_scale }; // side length of square cell
 const float targetWidth { 1440.0f / world_scale };
 const float targetHeight { 846.0f / world_scale };
 
 
 // project-specific settings
-// const float triangle_scale { 1 / 64.0f };
-const float triangle_scale { 5.0f };
-const unsigned int numObjs { 1000 };
+// const float shape_scale { 1 / 64.0f };
+const float shape_scale { 5.0f / world_scale };
+const unsigned int numObjs { 5000 };
 const unsigned int neighborCount { 5 };
 const float DT { 0.025f };
 float v_magnitude { 200.0f };
@@ -66,9 +67,9 @@ void set_sdl_gl_attributes()
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
-    // nice to have here
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1); // Enable multisampling
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4); // 4x MSAA (Sweet spot for quality/performance)
+    // nice to have here (slows things down!)
+    // SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1); // Enable multisampling
+    // SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4); // 4x MSAA (Sweet spot for quality/performance)
 }
 
 void evolveTime(SDL_Event& event)
@@ -157,21 +158,17 @@ void imguiWindow(ImGuiIO& io, Swarm& swarm)
     // Maintain a static rolling buffer of historical data (e.g., last 200 frames)
     const int HISTORY_SIZE = 200;
     static float phi_history[HISTORY_SIZE] = { 0.0f };
-    
+    static int head = 0;
+
     if (!paused)
     {
-        // shift by one to make space for new value
-        for (int i = 0; i < HISTORY_SIZE - 1; ++i)
-        {
-            phi_history[i] = phi_history[i+1];
-        }
-
-        phi_history[HISTORY_SIZE - 1] = swarm.order_param;
+        phi_history[head] = swarm.order_param;
+        head = (head + 1) % HISTORY_SIZE;
     }
 
     // Render the scrolling line graph
     // Arguments: Label, data array, array size, values offset, overlay text, min value, max value, graph size
-    ImGui::PlotLines("##PhiGraph", phi_history, HISTORY_SIZE, 0, "Global Order (Phi)", 0.0f, 1.0f, ImVec2(0, 100));
+    ImGui::PlotLines("##PhiGraph", phi_history, HISTORY_SIZE, head, "Global Order (Phi)", 0.0f, 1.0f, ImVec2(0, 100));
     
     ImGui::End();
 }
@@ -189,7 +186,7 @@ int main()
             
             // initialize swarm up here so that we can use the SHG-adjusted width/height to fit the window perfectly
             // specifying the number of agents automatically generates random particles
-            Swarm swarm(cellSize, targetWidth, targetHeight, triangle_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs);
+            Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs);
             const float width = swarm.x_max;
             const float height = swarm.y_max;
 
@@ -220,7 +217,7 @@ int main()
             GLCall(glEnable(GL_BLEND));
             GLCall(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 
-            GLCall(glEnable(GL_MULTISAMPLE));
+            // GLCall(glEnable(GL_MULTISAMPLE));
 
             printKey();
 
@@ -228,12 +225,9 @@ int main()
             std::vector<Triangle> tris;
             tris.reserve(numObjs);
             
-            // create triangles
-            for (unsigned int i = 0; i < numObjs; ++i)
-            {
-                tris.emplace_back(Triangle(glm::vec2(0.0f, 2.0f), glm::vec2(1.7321f, -1.0f), glm::vec2(-1.7321f, -1.0f), glm::fvec4(1.0f)));
-                // tris.emplace_back(Triangle(glm::vec2(0.0f, 0.0f), triangle_scale * glm::vec2(width/2.0f, 0.0f), triangle_scale * glm::vec2(width/4.0f, height), glm::fvec4(1.0f)));
-            }
+            // create triangle (only need one since instance drawing!)
+            tris.emplace_back(Triangle(glm::vec2(0.0f, 2.0f), glm::vec2(1.7321f, -1.0f), glm::vec2(-1.7321f, -1.0f), glm::fvec4(1.0f)));
+            // tris.emplace_back(Triangle(glm::vec2(0.0f, 0.0f), shape_scale * glm::vec2(width/2.0f, 0.0f), shape_scale * glm::vec2(width/4.0f, height), glm::fvec4(1.0f)));
 
             // prepare triangles for graphics
             Triangles triangles(tris);
@@ -285,6 +279,8 @@ int main()
             is_running = true;
 
             // Uint64 lastTime = SDL_GetPerformanceCounter();
+            // GLuint query;
+            // glGenQueries(1, &query);
 
             while(is_running)
             {
@@ -317,7 +313,7 @@ int main()
                 ImGui_ImplSDL2_NewFrame();
                 ImGui::NewFrame();
                 imguiWindow(io, swarm);
-
+                
                 // evolve time if unpaused
                 if (not paused)
                 {
@@ -351,6 +347,7 @@ int main()
 
                 // updating and rendering stuff happens here
                 
+                // auto r0 = std::chrono::high_resolution_clock::now();
                 // update buffers (position, color, alpha)
                 if (color)
                 {
@@ -362,22 +359,70 @@ int main()
                     colorInstanceVBO.updateBuffer(defaultColors.data());
                 }
 
+                // auto r1 = std::chrono::high_resolution_clock::now();
                 instanceVBO.updateBuffer(swarm.modelMatrices.data());
 
-
+                // auto r2 = std::chrono::high_resolution_clock::now();
                 renderer.clear();
 
                 // draw objects
+                // auto r3 = std::chrono::high_resolution_clock::now();
+
+                // glBeginQuery(GL_SAMPLES_PASSED, query);
+                // glBeginQuery(GL_TIME_ELAPSED, query);
                 renderer.drawTriangles(tri_VAO, tri_IBO, tri_shader, static_cast<int>(numObjs));
+                // glEndQuery(GL_TIME_ELAPSED);
+                // GLuint64 ns;
+                // glGetQueryObjectui64v(query,
+                //                     GL_QUERY_RESULT,
+                //                     &ns);
+
+                // std::cout
+                // << ns / 1000000.0
+                // << '\n';
+                // glEndQuery(GL_SAMPLES_PASSED);
+
+                // GLuint samples;
+                // glGetQueryObjectuiv(query,
+                //                     GL_QUERY_RESULT,
+                //                     &samples);
+                // std::cout << samples << std::endl;
+
+                // auto t0 = std::chrono::high_resolution_clock::now();
+
+                // glFinish();
+
+                // auto t1 = std::chrono::high_resolution_clock::now();
+
+                // std::cout
+                //     << "glFinish: "
+                //     << std::chrono::duration<double, std::milli>(t1 - t0).count()
+                //     << '\n';
 
                 // Dear ImGui Rendering
                 // (Your code clears your framebuffer, renders your other stuff etc.)
+                // auto r4 = std::chrono::high_resolution_clock::now();
                 ImGui::Render();
                 ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
                 // (Your code calls SDL_GL_SwapWindow() etc.)
 
+                // auto r5 = std::chrono::high_resolution_clock::now();
                 SDL_GL_SwapWindow(window);
+                // auto r6 = std::chrono::high_resolution_clock::now();
+
+                // if (!paused)
+                // {
+                //     std::cout << '\n';
+                //     std::cout << "color upload" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r1 - r0).count() / 1000.0 << " ms" << '\n';
+                //     std::cout << "matrix upload" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r2 - r1).count() / 1000.0 << " ms" << '\n';
+                //     std::cout << "render clear" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r3 - r2).count() / 1000.0 << " ms" << '\n';
+                //     std::cout << "draw" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r4 - r3).count() / 1000.0 << " ms" << '\n';
+                //     std::cout << "imgui" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r5 - r4).count() / 1000.0 << " ms" << '\n';
+                //     std::cout << "swap" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r6 - r5).count() / 1000.0 << " ms" << '\n';
+                // }
             }
+
+            // glDeleteQueries(1,&query);
 
             ImGui_ImplOpenGL3_Shutdown();
             ImGui_ImplSDL2_Shutdown();
@@ -405,7 +450,7 @@ int main()
 
         for (unsigned int i = 0; i < NNList.size(); ++i)
         {
-            workers.emplace_back(&Utilities::parallelSims, cellSize, targetWidth, targetHeight, triangle_scale, rd(), noiseScale, NNList[i], v_magnitude, numObjs, DT);
+            workers.emplace_back(&Utilities::parallelSims, cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, NNList[i], v_magnitude, numObjs, DT);
         }
         
         for (auto& thread : workers)

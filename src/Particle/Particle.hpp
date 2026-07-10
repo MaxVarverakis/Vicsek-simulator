@@ -8,9 +8,15 @@ struct Particle
 {
     glm::vec2 position;
     float velocity, angle; // angle in radians
+    float sinAngle, cosAngle;
 
     Particle(glm::vec2 pos, float vel, float theta = 0.0f)
-        : position { pos }, velocity { vel }, angle { theta } {};
+        : position { pos }
+        , velocity { vel }
+        , angle { theta }
+        , sinAngle { glm::sin(angle) }
+        , cosAngle { glm::cos(angle) }
+        {};
 
     void update(float dt, float x_max, float y_max, float v)
     {
@@ -19,6 +25,8 @@ struct Particle
 
         // shift to [-pi, pi]
         angle = std::remainderf(angle, 2.0f * PI);
+        sinAngle = glm::sin(angle);
+        cosAngle = glm::cos(angle);
 
         position += velocity * glm::vec2(glm::cos(angle), glm::sin(angle)) * dt;
         applyPeriodicBC(x_max, y_max);

@@ -61,7 +61,7 @@ $(BUILD_DIR)/imgui/%.o: $(IMGUI_DIR)/backends/%.cpp
 -include $(DEPS)
 
 release:
-	$(MAKE) clean
+# 	$(MAKE) clean
 	$(MAKE) SANITIZERS="" CXXFLAGS="$(filter-out -O0 $(SANITIZERS),$(CXXFLAGS)) -O3"
 
 clean:

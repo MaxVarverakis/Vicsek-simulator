@@ -116,7 +116,7 @@ struct Swarm
     
     void sense();
     
-    std::vector<float> tradSense();
+    void tradSense();
     
     void updateParticles(float dt)
     {
@@ -134,6 +134,7 @@ struct Swarm
         // build the sorted gridParticles of SHG before sensing!
         grid.build(particles);
         sense();
+        // tradSense();
 
         for (unsigned int i = 0; i < particles.size(); ++i)
         {

@@ -38,17 +38,18 @@ void Swarm::sense()
                     if (delta.y > y_max / 2.0f) { delta.y -= y_max; }
                     if (delta.y < -y_max / 2.0f) { delta.y += y_max; }
 
-                    float distance = glm::length(delta);
+                    // compare squared distance to avoid unnecessary sqrt
+                    float d2 = glm::dot(delta, delta);
 
                     for (unsigned int n = 0; n < nNeighbors; ++n)
                     {
-                        if (distance < scratch_distances[n])
+                        if (d2 < scratch_distances[n])
                         {
                             // bump and insert
                             std::move_backward(scratch_distances.begin() + n, scratch_distances.end() - 1, scratch_distances.end());
                             std::move_backward(scratch_neighborIds.begin() + n, scratch_neighborIds.end() - 1, scratch_neighborIds.end());
 
-                            scratch_distances[n] = distance;
+                            scratch_distances[n] = d2;
                             scratch_neighborIds[n] = j;
                             break;
                         }
@@ -75,8 +76,8 @@ void Swarm::sense()
         }
 
         // now that we have a list of the n-nearest neighbor indices, we can perform the sensing step
-        float sinSum = glm::sin(particles[i].angle);
-        float cosSum = glm::cos(particles[i].angle);
+        float sinSum = particles[i].sinAngle;
+        float cosSum = particles[i].cosAngle;
 
         for (unsigned int n = 0; n < nNeighbors; ++n)
         {
@@ -94,8 +95,8 @@ void Swarm::sense()
                 float weight = 1.0f - (static_cast<float>(n) / static_cast<float>(nNeighbors + 1));;
                 // float weight = powf(0.5f, static_cast<float>(n));
 
-                sinSum += glm::sin(particles[neighborIdx].angle) * weight;
-                cosSum += glm::cos(particles[neighborIdx].angle) * weight;
+                sinSum += particles[neighborIdx].sinAngle * weight;
+                cosSum += particles[neighborIdx].cosAngle * weight;
             }
             else
             {
@@ -107,57 +108,51 @@ void Swarm::sense()
     }
 }
 
-std::vector<float> Swarm::tradSense()
+void Swarm::tradSense()
 {
     const float senseRadius = grid.cellSize;
 
-    std::vector<float> angles(particles.size());
-
     for (unsigned int i = 0; i < particles.size(); ++i)
     {
-        float sinSum = glm::sin(particles[i].angle);
-        float cosSum = glm::cos(particles[i].angle);
+        float sinSum = particles[i].sinAngle;
+        float cosSum = particles[i].cosAngle;
 
         unsigned int homeCell = grid.hash(particles[i]);
 
-        // homeCell is include in neighbors vector
-        grid.getCellsAtLevel(homeCell, 0, i);
-        std::vector<unsigned int> neighborCells = grid.outCells;
-        grid.getCellsAtLevel(homeCell, 1, i);
-        neighborCells.insert(neighborCells.end(), grid.outCells.begin(), grid.outCells.end());
-
-        for (unsigned int cellID : neighborCells)
+        for (unsigned int level = 0; level < 2; ++level)
         {
-            unsigned int start = grid.cellOffsets[cellID    ];
-            unsigned int end   = grid.cellOffsets[cellID + 1];
-
-            for (unsigned int k = start; k < end; ++k)
+            grid.getCellsAtLevel(homeCell, level, i);
+            for (unsigned int cellID : grid.outCells)
             {
-                unsigned int j = grid.gridParticles[k];
-                if (j == i) continue;
+                unsigned int start = grid.cellOffsets[cellID    ];
+                unsigned int end   = grid.cellOffsets[cellID + 1];
 
-                glm::vec2 delta = particles[i].position - particles[j].position;
-                // account for periodic BCs
-                if (delta.x > x_max / 2.0f) { delta.x -= x_max; }
-                if (delta.x < -x_max / 2.0f) { delta.x += x_max; }
-                if (delta.y > y_max / 2.0f) { delta.y -= y_max; }
-                if (delta.y < -y_max / 2.0f) { delta.y += y_max; }
-
-                float distance = glm::length(delta);
-
-                if (distance < senseRadius)
+                for (unsigned int k = start; k < end; ++k)
                 {
-                    float weight = 1.0f;
-                    // float weight = (distance < 0.1f) ? 1.0f / 0.1f : 1.0f / distance;
+                    unsigned int j = grid.gridParticles[k];
+                    if (j == i) continue;
 
-                    sinSum += glm::sin(particles[j].angle) * weight;
-                    cosSum += glm::cos(particles[j].angle) * weight;
+                    glm::vec2 delta = particles[i].position - particles[j].position;
+                    // account for periodic BCs
+                    if (delta.x > x_max / 2.0f) { delta.x -= x_max; }
+                    if (delta.x < -x_max / 2.0f) { delta.x += x_max; }
+                    if (delta.y > y_max / 2.0f) { delta.y -= y_max; }
+                    if (delta.y < -y_max / 2.0f) { delta.y += y_max; }
+
+                    float d2 = glm::dot(delta, delta);
+
+                    if (d2 < senseRadius * senseRadius)
+                    {
+                        float weight = 1.0f;
+                        // float weight = (distance < 0.1f) ? 1.0f / 0.1f : 1.0f / distance;
+
+                        sinSum += particles[j].sinAngle * weight;
+                        cosSum += particles[j].cosAngle * weight;
+                    }
                 }
             }
         }
         
-        angles[i] = glm::atan(sinSum, cosSum) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
+        targetAngles[i] = glm::atan(sinSum, cosSum) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
     }
-
-    return angles;
 }
