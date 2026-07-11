@@ -34,21 +34,22 @@ bool step { false };
 
 const float world_scale { 1.0f };
 
-const float cellSize { 50.0f / world_scale }; // side length of square cell
+const float cellSize { 5.0f / world_scale }; // side length of square cell
 const float targetWidth { 1440.0f / world_scale };
 const float targetHeight { 846.0f / world_scale };
 
 
 // project-specific settings
 // const float shape_scale { 1 / 64.0f };
-const float shape_scale { 5.0f / world_scale };
-const unsigned int numObjs { 5000 };
+const float shape_scale { 3.0f / world_scale };
+const unsigned int numObjs { 20000 };
 const unsigned int neighborCount { 5 };
 const float DT { 0.025f };
 float v_magnitude { 200.0f };
 float noiseScale { 0.2f };
 unsigned int terminationCount = 300;
-bool color { false };
+bool color { true };
+bool alreadyDefault { false };
 bool ui_collapsed { true };
 
 static const std::vector<glm::vec4> defaultColors(numObjs, glm::vec4(1.0f));
@@ -105,8 +106,8 @@ void printKey()
     std::cout << "KEY" << '\n';
     std::cout << "Spacebar" << '\t' << "Play/pause" << '\n';
     std::cout << "Right arrow" << '\t' << "Time forward" << '\n';
-    // std::cout << "Left arrow" << '\t' << "Time reverse" << '\n';
-    // std::cout << "Enter/Return" << '\t' << "Reset particles" << '\n';
+    std::cout << "c" << '\t' << '\t' << "Colors on/off" << '\n';
+    std::cout << "m" << '\t' << '\t' << "Expand/minimize GUI" << '\n';
     std::cout << "###################################" << '\n' << '\n';
 }
 
@@ -189,7 +190,9 @@ int main()
             Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs);
             const float width = swarm.x_max;
             const float height = swarm.y_max;
-
+            std::cout << "width:" << '\t' << width << '\n';
+            std::cout << "height:" << '\t' << height << '\n';
+            
             window = SDL_CreateWindow("Window Title", 0.0f, 0.0f, static_cast<int>(width), static_cast<int>(height), SDL_WINDOW_OPENGL);
             gl_context = SDL_GL_CreateContext(window);
             SDL_GL_SetSwapInterval(1);
@@ -247,7 +250,7 @@ int main()
             VertexBuffer instanceVBO(swarm.modelMatrices.data(), static_cast<unsigned int>(swarm.modelMatrices.size() * sizeof(glm::mat4)), GL_DYNAMIC_DRAW);
             tri_VAO.addInstancedBuffer(instanceVBO, 2, 16);
 
-            swarm.colors.resize(numObjs, glm::vec4(1.0f));
+            // swarm.colors.resize(numObjs, glm::vec4(1.0f));
             VertexBuffer colorInstanceVBO(swarm.colors.data(), static_cast<unsigned int>(swarm.colors.size() * sizeof(glm::vec4)), GL_DYNAMIC_DRAW);
             // add to slot 6 since the instance mat4's take up 4 slots (2, 3, 4, 5)
             tri_VAO.addInstancedBuffer(colorInstanceVBO, 6, 4);
@@ -353,10 +356,19 @@ int main()
                 {
                     // triangles.udpateColors(swarm.colors);
                     colorInstanceVBO.updateBuffer(swarm.colors.data());
+
+                    if (alreadyDefault)
+                    {
+                        alreadyDefault = !alreadyDefault;
+                    }
                 }
                 else
                 {
-                    colorInstanceVBO.updateBuffer(defaultColors.data());
+                    if (!alreadyDefault)
+                    {
+                        colorInstanceVBO.updateBuffer(defaultColors.data());
+                        alreadyDefault = !alreadyDefault;
+                    }
                 }
 
                 // auto r1 = std::chrono::high_resolution_clock::now();

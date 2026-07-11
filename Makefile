@@ -1,7 +1,7 @@
 # Compiler and flags
-SANITIZERS = -fsanitize=address,undefined
+SANITIZERS = 
 CXX = /opt/homebrew/opt/llvm/bin/clang++
-CXXFLAGS = -fcolor-diagnostics -fansi-escape-codes -g -pedantic-errors -Wall -Weffc++ -Wextra -Wconversion -Wsign-conversion -fopenmp -std=c++23 -O0 -arch arm64 $(SANITIZERS) -MMD -MP
+CXXFLAGS = -fcolor-diagnostics -fansi-escape-codes -g -pedantic-errors -Wall -Weffc++ -Wextra -Wconversion -Wsign-conversion -fopenmp -std=c++23 -O3 -arch arm64 -MMD -MP
 
 # Include paths
 INCLUDES = -Isrc -I/Users/max/OpenGL_Framework/src -I/opt/homebrew/Cellar/sdl2/2.32.10/include -I/opt/homebrew/Cellar/sdl2/2.32.10/include/sdl2 -I/opt/homebrew/Cellar/glew/2.3.1/include -I/opt/homebrew/Cellar/glm/1.0.3/include -I/Users/max/OpenGL_Framework/vendor/imgui -I/Users/max/OpenGL_Framework/vendor/imgui/backends
@@ -41,7 +41,7 @@ all: $(TARGET)
 
 # Link the executable
 $(TARGET): $(ALL_OBJS) /Users/max/OpenGL_Framework/$(LIB_DIR)/libopenglframework.a
-	$(CXX) $(CXXFLAGS) $(SANITIZERS) -o $@ $(ALL_OBJS) $(LDFLAGS) $(LINKER_FLAGS)
+	$(CXX) $(CXXFLAGS) -o $@ $(ALL_OBJS) $(LDFLAGS) $(LINKER_FLAGS)
 
 # Rule 1: Compile local project source files
 $(BUILD_DIR)/%.o: %.cpp
@@ -60,9 +60,10 @@ $(BUILD_DIR)/imgui/%.o: $(IMGUI_DIR)/backends/%.cpp
 
 -include $(DEPS)
 
-release:
-# 	$(MAKE) clean
-	$(MAKE) SANITIZERS="" CXXFLAGS="$(filter-out -O0 $(SANITIZERS),$(CXXFLAGS)) -O3"
+debug:
+	$(MAKE) clean
+	$(MAKE) SANITIZERS="-fsanitize=address,undefined" \
+	CXXFLAGS="$(filter-out -O3,$(CXXFLAGS)) -O0" all
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -1,5 +1,72 @@
 #include "Swarm.hpp"
 
+void Swarm::nSquaredSense()
+{
+    for (unsigned int i = 0; i < particles.size(); ++i)
+    {
+        for (unsigned int j = 0; j < particles.size(); ++j)
+        {
+            
+            if (i == j) continue;
+
+            glm::vec2 delta = particles[i].position - particles[j].position;
+            // account for periodic BCs
+            if (delta.x > x_max / 2.0f) { delta.x -= x_max; }
+            if (delta.x < -x_max / 2.0f) { delta.x += x_max; }
+            if (delta.y > y_max / 2.0f) { delta.y -= y_max; }
+            if (delta.y < -y_max / 2.0f) { delta.y += y_max; }
+
+            // compare squared distance to avoid unnecessary sqrt
+            float d2 = glm::dot(delta, delta);
+
+            for (unsigned int n = 0; n < nNeighbors; ++n)
+            {
+                if (d2 < scratch_distances[n])
+                {
+                    // bump and insert
+                    std::move_backward(scratch_distances.begin() + n, scratch_distances.end() - 1, scratch_distances.end());
+                    std::move_backward(scratch_neighborIds.begin() + n, scratch_neighborIds.end() - 1, scratch_neighborIds.end());
+
+                    scratch_distances[n] = d2;
+                    scratch_neighborIds[n] = j;
+                    break;
+                }
+            }
+        }
+
+        // now that we have a list of the n-nearest neighbor indices, we can perform the sensing step
+        float sinSum = particles[i].sinAngle;
+        float cosSum = particles[i].cosAngle;
+
+        for (unsigned int n = 0; n < nNeighbors; ++n)
+        {
+            if (scratch_distances[n] != std::numeric_limits<float>::infinity())
+            {
+                unsigned int neighborIdx = scratch_neighborIds[n];
+                
+                // no weight
+                // float weight = 1.0f;
+                
+                // distance-based alignment weights
+                // float weight = (scratch_distances[n] < 0.1f) ? 1.0f / 0.1f : 1.0f / scratch_distances[n];
+
+                // closeness-based alignment weights
+                float weight = 1.0f - (static_cast<float>(n) / static_cast<float>(nNeighbors + 1));;
+                // float weight = powf(0.5f, static_cast<float>(n));
+
+                sinSum += particles[neighborIdx].sinAngle * weight;
+                cosSum += particles[neighborIdx].cosAngle * weight;
+            }
+            else
+            {
+                break;
+            }
+        }
+        
+        targetAngles[i] = glm::atan(sinSum, cosSum) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
+    }
+}
+
 void Swarm::sense()
 {
     for (unsigned int i = 0; i < particles.size(); ++i)

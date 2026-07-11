@@ -95,6 +95,11 @@ struct Swarm
         scratch_neighborIds.resize(nNeighbors, 0);
         scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
 
+        if (colors_bool && (colors.size() < particles.size()))
+        {
+            colors.reserve(particles.size());
+        }
+
         // generate random particles
         for (unsigned int i = 0; i < numParticles; ++i)
         {
@@ -112,7 +117,10 @@ struct Swarm
     {
         particles.emplace_back(particle);
         modelMatrices.emplace_back(generateModelMatrix(particle));
+        colors.emplace_back(Utilities::cycle_angle_to_color(particle.angle));
     }
+    
+    void nSquaredSense();
     
     void sense();
     
