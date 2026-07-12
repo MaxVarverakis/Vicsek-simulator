@@ -34,7 +34,7 @@ bool step { false };
 
 const float world_scale { 1.0f };
 
-const float cellSize { 15.0f / world_scale }; // side length of square cell
+const float cellSize { 3.0f / world_scale }; // side length of square cell
 const float targetWidth { 1440.0f / world_scale };
 const float targetHeight { 846.0f / world_scale };
 
@@ -42,8 +42,8 @@ const float targetHeight { 846.0f / world_scale };
 // project-specific settings
 // const float shape_scale { 1 / 64.0f };
 const float shape_scale { 2.0f / world_scale };
-const unsigned int numObjs { 40000 };
-const unsigned int neighborCount { 3 };
+const unsigned int numObjs { 80000 };
+const unsigned int neighborCount { 4 };
 const float DT { 0.025f };
 
 float v_magnitude { 200.0f };
