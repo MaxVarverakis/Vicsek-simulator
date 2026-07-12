@@ -2,6 +2,14 @@
 
 void Swarm::nsSense(unsigned int pID)
 {
+    unsigned int tid = static_cast<unsigned int>(omp_get_thread_num());
+
+    unsigned int* ids = scratch_neighborIds.data() + tid * nNeighbors;
+    float* dist = scratch_distances.data() + tid * nNeighbors;
+
+    std::fill(ids, ids + nNeighbors, 0);
+    std::fill(dist, dist + nNeighbors, std::numeric_limits<float>::infinity());
+
     for (unsigned int j = 0; j < positions.size(); ++j)
     {
         
@@ -19,20 +27,20 @@ void Swarm::nsSense(unsigned int pID)
 
         for (unsigned int n = 0; n < nNeighbors; ++n)
         {
-            if (d2 < scratch_distances[n])
+            if (d2 < dist[n])
             {
                 // bump and insert
-                // std::move_backward(scratch_distances.begin() + n, scratch_distances.end() - 1, scratch_distances.end());
-                // std::move_backward(scratch_neighborIds.begin() + n, scratch_neighborIds.end() - 1, scratch_neighborIds.end());
+                // std::move_backward(dist + n, dist + nNeighbors - 1, dist + nNeighbors);
+                // std::move_backward(ids + n, ids + nNeighbors - 1, ids + nNeighbors);
 
                 for (unsigned int m = nNeighbors - 1; m > n; --m)
                 {
-                    scratch_distances[m] = scratch_distances[m-1];
-                    scratch_neighborIds[m] = scratch_neighborIds[m-1];
+                    dist[m] = dist[m-1];
+                    ids[m] = ids[m-1];
                 }
 
-                scratch_distances[n] = d2;
-                scratch_neighborIds[n] = j;
+                dist[n] = d2;
+                ids[n] = j;
                 break;
             }
         }
@@ -43,15 +51,15 @@ void Swarm::nsSense(unsigned int pID)
 
     for (unsigned int n = 0; n < nNeighbors; ++n)
     {
-        if (scratch_distances[n] != std::numeric_limits<float>::infinity())
+        if (dist[n] != std::numeric_limits<float>::infinity())
         {
-            unsigned int neighborIdx = scratch_neighborIds[n];
+            unsigned int neighborIdx = ids[n];
             
             // no weight
             // float weight = 1.0f;
             
             // distance-based alignment weights
-            // float weight = (scratch_distances[n] < 0.1f) ? 1.0f / 0.1f : 1.0f / scratch_distances[n];
+            // float weight = (dist[n] < 0.1f) ? 1.0f / 0.1f : 1.0f / dist[n];
 
             // closeness-based alignment weights
             float weight = 1.0f - (static_cast<float>(n) / static_cast<float>(nNeighbors + 1));;
@@ -65,13 +73,18 @@ void Swarm::nsSense(unsigned int pID)
         }
     }
     
-    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
+    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * uniformDist(rngs[tid]) - 1.0f);
 }
 
 void Swarm::sense(unsigned int pID)
 {
-    std::fill(scratch_neighborIds.begin(), scratch_neighborIds.end(), 0);
-    std::fill(scratch_distances.begin(), scratch_distances.end(), std::numeric_limits<float>::infinity());
+    unsigned int tid = static_cast<unsigned int>(omp_get_thread_num());
+
+    unsigned int* ids = scratch_neighborIds.data() + tid * nNeighbors;
+    float* dist = scratch_distances.data() + tid * nNeighbors;
+
+    std::fill(ids, ids + nNeighbors, 0);
+    std::fill(dist, dist + nNeighbors, std::numeric_limits<float>::infinity());
 
     unsigned int homeCell = grid.hash(positions[pID]);
     unsigned int level = 0;
@@ -79,14 +92,14 @@ void Swarm::sense(unsigned int pID)
 
     while (true)
     {
-        grid.getCellsAtLevel(homeCell, level, pID);
+        std::vector<unsigned int>& cells = grid.getCellsAtLevel(homeCell, level, pID, tid);
 
-        if (grid.outCells.empty() || level > std::max(grid.nX, grid.nY) / 2) 
+        if (cells.empty() || level > std::max(grid.nX, grid.nY) / 2) 
         {
             break;
         }
 
-        for (unsigned int cellID : grid.outCells)
+        for (unsigned int cellID : cells)
         {
             unsigned int start = grid.cellOffsets[cellID    ];
             unsigned int end   = grid.cellOffsets[cellID + 1];
@@ -109,20 +122,20 @@ void Swarm::sense(unsigned int pID)
 
                 for (unsigned int n = 0; n < nNeighbors; ++n)
                 {
-                    if (d2 < scratch_distances[n])
+                    if (d2 < dist[n])
                     {
                         // bump and insert
-                        // std::move_backward(scratch_distances.begin() + n, scratch_distances.end() - 1, scratch_distances.end());
-                        // std::move_backward(scratch_neighborIds.begin() + n, scratch_neighborIds.end() - 1, scratch_neighborIds.end());
+                        // std::move_backward(dist + n, dist + nNeighbors - 1, dist + nNeighbors);
+                        // std::move_backward(ids + n, ids + nNeighbors - 1, ids + nNeighbors);
 
                         for (unsigned int m = nNeighbors - 1; m > n; --m)
                         {
-                            scratch_distances[m] = scratch_distances[m-1];
-                            scratch_neighborIds[m] = scratch_neighborIds[m-1];
+                            dist[m] = dist[m-1];
+                            ids[m] = ids[m-1];
                         }
 
-                        scratch_distances[n] = d2;
-                        scratch_neighborIds[n] = j;
+                        dist[n] = d2;
+                        ids[n] = j;
                         break;
                     }
                 }
@@ -130,7 +143,7 @@ void Swarm::sense(unsigned int pID)
         }
 
         // check to see if enough neighbors have been found
-        if (scratch_distances.back() != std::numeric_limits<float>::infinity())
+        if (dist[nNeighbors - 1] != std::numeric_limits<float>::infinity())
         {
             if (!foundEnough)
             {
@@ -152,15 +165,15 @@ void Swarm::sense(unsigned int pID)
 
     for (unsigned int n = 0; n < nNeighbors; ++n)
     {
-        if (scratch_distances[n] != std::numeric_limits<float>::infinity())
+        if (dist[n] != std::numeric_limits<float>::infinity())
         {
-            unsigned int neighborIdx = scratch_neighborIds[n];
+            unsigned int neighborIdx = ids[n];
             
             // no weight
             // float weight = 1.0f;
             
             // distance-based alignment weights
-            // float weight = (scratch_distances[n] < 0.1f) ? 1.0f / 0.1f : 1.0f / scratch_distances[n];
+            // float weight = (dist[n] < 0.1f) ? 1.0f / 0.1f : 1.0f / dist[n];
 
             // closeness-based alignment weights
             float weight = 1.0f - (static_cast<float>(n) / static_cast<float>(nNeighbors + 1));;
@@ -174,13 +187,15 @@ void Swarm::sense(unsigned int pID)
         }
     }
     
-    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
+    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * uniformDist(rngs[tid]) - 1.0f);
     
 }
 
 void Swarm::tradSense(unsigned int pID)
 {
     static const float senseRadius = grid.cellSize;
+    
+    unsigned int tid = static_cast<unsigned int>(omp_get_thread_num());
 
     glm::vec2 headingSum = headings[pID];
 
@@ -188,8 +203,8 @@ void Swarm::tradSense(unsigned int pID)
 
     for (unsigned int level = 0; level < 2; ++level)
     {
-        grid.getCellsAtLevel(homeCell, level, pID);
-        for (unsigned int cellID : grid.outCells)
+        std::vector<unsigned int>& cells = grid.getCellsAtLevel(homeCell, level, pID, tid);
+        for (unsigned int cellID : cells)
         {
             unsigned int start = grid.cellOffsets[cellID    ];
             unsigned int end   = grid.cellOffsets[cellID + 1];
@@ -219,5 +234,5 @@ void Swarm::tradSense(unsigned int pID)
         }
     }
     
-    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
+    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * uniformDist(rngs[tid]) - 1.0f);
 }

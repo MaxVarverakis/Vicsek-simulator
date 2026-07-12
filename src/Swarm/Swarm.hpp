@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <omp.h>
 
 #include "../Particle/Particle.hpp"
 #include "../SpatialHashGrid/SpatialHashGrid.hpp"
@@ -18,71 +19,71 @@ struct Swarm
     float x_max, y_max;
     float scale;
     uint32_t master_seed;
-    std::mt19937 rng;
-    std::uniform_real_distribution<float> dist{ 0.0f, 1.0f };
+    std::vector<std::mt19937> rngs;
+    std::uniform_real_distribution<float> uniformDist{ 0.0f, 1.0f };
     float noiseScale;
 
-    // perhaps having separate position and angle vectors rather than particle vector would be faster
     unsigned int nNeighbors;
     float velocity;
 
+
     std::vector<unsigned int> scratch_neighborIds;
     std::vector<float> scratch_distances;
+
     std::vector<float> targetAngles;
     std::vector<glm::vec2> positions, headings;
+    unsigned int numThreads;
     
     float order_param;
-    bool colors_bool;
+    bool colors_bool { false };
     std::vector<glm::vec4> colors;
 
-    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v)
-        : grid(cellSize, width, height)
+    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, int num_threads)
+        : grid(cellSize, width, height, static_cast<unsigned int>(num_threads))
         , x_max { cellSize * grid.nX }
         , y_max { cellSize * grid.nY }
         , scale { scaleFactor }
         , master_seed { seed }
-        , rng(seed)
         , noiseScale { scaleNoise }
         , nNeighbors { neighborCount }
         , velocity { v }
+        , numThreads { static_cast<unsigned int>(num_threads) }
     {
-        scratch_neighborIds.resize(nNeighbors, 0);
-        scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
+        initThreadData(num_threads);
     };
     
-    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, std::vector<glm::vec2> pos, std::vector<glm::vec2> directions)
-        : grid(cellSize, width, height)
+    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, std::vector<glm::vec2> pos, std::vector<glm::vec2> directions, int num_threads)
+        : grid(cellSize, width, height, static_cast<unsigned int>(num_threads))
         , x_max { cellSize * grid.nX }
         , y_max { cellSize * grid.nY }
         , scale { scaleFactor }
         , master_seed { seed }
-        , rng(seed)
         , noiseScale { scaleNoise }
         , nNeighbors { neighborCount }
         , velocity { v }
         , positions { pos }
         , headings { directions }
+        , numThreads { static_cast<unsigned int>(num_threads) }
     {
-        scratch_neighborIds.resize(nNeighbors, 0);
-        scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
+        initThreadData(num_threads);
     }
     
-    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles)
-        : grid(cellSize, width, height)
+    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles, int num_threads)
+        : grid(cellSize, width, height, static_cast<unsigned int>(num_threads))
         , x_max { cellSize * grid.nX }
         , y_max { cellSize * grid.nY }
         , scale { scaleFactor }
         , master_seed { seed }
-        , rng(seed)
         , noiseScale { scaleNoise }
         , nNeighbors { neighborCount }
         , velocity { v }
+        , numThreads { static_cast<unsigned int>(num_threads) }
     {
         positions.reserve(numParticles);
         headings.reserve(numParticles);
         targetAngles.resize(numParticles);
-        scratch_neighborIds.resize(nNeighbors, 0);
-        scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
+        
+        initThreadData(num_threads);
 
         if (colors_bool && (colors.size() < positions.size()))
         {
@@ -92,14 +93,27 @@ struct Swarm
         // generate random particles
         for (unsigned int i = 0; i < numParticles; ++i)
         {
-            float angle = PI * (2.0f * dist(rng) - 1.0f);
+            float angle = PI * (2.0f * uniformDist(rngs[0]) - 1.0f);
             positions.emplace_back(
-                glm::vec2(x_max * dist(rng), y_max * dist(rng))
+                glm::vec2(x_max * uniformDist(rngs[0]), y_max * uniformDist(rngs[0]))
             );
             headings.emplace_back(
                 glm::cos(angle), glm::sin(angle)
             );
             colors.emplace_back(Utilities::cycle_angle_to_color(angle));
+        }
+    }
+
+    void initThreadData(int num_threads)
+    {
+        omp_set_num_threads(num_threads);
+        scratch_neighborIds.resize(nNeighbors * numThreads, 0);
+        scratch_distances.resize(nNeighbors * numThreads, std::numeric_limits<float>::infinity());
+
+        rngs.reserve(numThreads);
+        for (unsigned int i = 0; i < numThreads; i++)
+        {
+            rngs.emplace_back(master_seed + i);
         }
     }
 
@@ -152,19 +166,17 @@ struct Swarm
         float v_hat_x = 0.0f;
         float v_hat_y = 0.0f;
 
-        // build the sorted gridParticles of SHG before sensing!
-        auto t0 = std::chrono::high_resolution_clock::now();
+        // build the sorted gridParticles of SHG before sensing!    
         grid.build(positions);
-        auto t1 = std::chrono::high_resolution_clock::now();
-        for (unsigned int i = 0; i < positions.size(); ++i) { sense(i); }
-        auto t2 = std::chrono::high_resolution_clock::now();
-        // tradSense();
+    
+        #pragma omp parallel for schedule(static)
+        for (unsigned int i = 0; i < positions.size(); ++i)
+        {
+            sense(i);
+            // tradSense(i);
+        }
 
-        std::cout << '\n';
-        std::cout << "build" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0 << " ms" << '\n';
-        std::cout << "sense" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0 << " ms" << '\n';
-
-        #pragma omp parallel for reduction(+:v_hat_x,v_hat_y)
+        #pragma omp parallel for schedule(static) reduction(+:v_hat_x,v_hat_y)
         for (unsigned int i = 0; i < positions.size(); ++i)
         {
             updateParticle(i, dt);

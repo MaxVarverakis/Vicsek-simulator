@@ -1,14 +1,20 @@
 #include "SpatialHashGrid.hpp"
 
-SpatialHashGrid::SpatialHashGrid(float size, float width, float height)
+SpatialHashGrid::SpatialHashGrid(float size, float width, float height, unsigned int num_threads)
     : cellSize { size }
     , nX { static_cast<unsigned int>(width / size) }
     , nY { static_cast<unsigned int>(height / size) }
     , numCells { nX * nY }
 {
     cellOffsets.resize(numCells + 1);
-    offsetCopy.reserve(numCells + 1);
-    scannedCells.resize(numCells);
+    offsetCopy.resize(numCells + 1);
+    scannedCells.resize(numCells * num_threads);
+    outCells.resize(num_threads);
+
+    for (std::vector<unsigned int>& v : outCells)
+    {
+        v.reserve(9);
+    }
 }
 
 unsigned int SpatialHashGrid::hash(const glm::vec2& position)
@@ -73,9 +79,12 @@ void SpatialHashGrid::build(const std::vector<glm::vec2>& positions)
     }
 }
 
-void SpatialHashGrid::getCellsAtLevel(unsigned int cellID, unsigned int level, unsigned int particleIdx)
+std::vector<unsigned int>& SpatialHashGrid::getCellsAtLevel(unsigned int cellID, unsigned int level, unsigned int particleIdx, unsigned int threadID)
 {
-    outCells.clear();
+    unsigned int* scanned = scannedCells.data() + threadID * numCells;
+    
+    std::vector<unsigned int>& out = outCells[threadID];
+    out.clear();
 
     // un-flatten home cell coordinates (row-major)
     int X = static_cast<int>(cellID % nX);
@@ -84,8 +93,8 @@ void SpatialHashGrid::getCellsAtLevel(unsigned int cellID, unsigned int level, u
     // handle home cell special case
     if (level == 0)
     {
-        outCells.push_back(cellID);
-        return;
+        out.push_back(cellID);
+        return out;
     }
 
     int iLevel = static_cast<int>(level);
@@ -125,13 +134,15 @@ void SpatialHashGrid::getCellsAtLevel(unsigned int cellID, unsigned int level, u
 
             // check if cell is already in list
             // (this can happen for small grids like 3x2)
-            if (scannedCells[targetCell] != stamp)
+            if (scanned[targetCell] != stamp)
             {
-                scannedCells[targetCell] = stamp; // flag to avoid double dipping
-                outCells.push_back(targetCell);
+                scanned[targetCell] = stamp; // flag to avoid double dipping
+                out.push_back(targetCell);
             }
         }
     }
+    
+    return out;
 }
 
 std::vector<unsigned int> SpatialHashGrid::neighbors(unsigned int cellID)

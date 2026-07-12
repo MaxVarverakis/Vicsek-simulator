@@ -24,7 +24,7 @@
 SDL_Window* window;
 SDL_GLContext gl_context;
 
-const uint8_t num_threads { static_cast<uint8_t>(std::thread::hardware_concurrency()) };
+const int num_threads { static_cast<int>(std::thread::hardware_concurrency()) };
 
 const bool renderGraphics { true };
 
@@ -34,16 +34,16 @@ bool step { false };
 
 const float world_scale { 1.0f };
 
-const float cellSize { 5.0f / world_scale }; // side length of square cell
+const float cellSize { 15.0f / world_scale }; // side length of square cell
 const float targetWidth { 1440.0f / world_scale };
 const float targetHeight { 846.0f / world_scale };
 
 
 // project-specific settings
 // const float shape_scale { 1 / 64.0f };
-const float shape_scale { 3.0f / world_scale };
-const unsigned int numObjs { 20000 };
-const unsigned int neighborCount { 5 };
+const float shape_scale { 2.0f / world_scale };
+const unsigned int numObjs { 40000 };
+const unsigned int neighborCount { 3 };
 const float DT { 0.025f };
 
 float v_magnitude { 200.0f };
@@ -189,7 +189,7 @@ int main()
             
             // initialize swarm up here so that we can use the SHG-adjusted width/height to fit the window perfectly
             // specifying the number of agents automatically generates random particles
-            Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs);
+            Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs, num_threads);
             const float width = swarm.x_max;
             const float height = swarm.y_max;
             
@@ -459,7 +459,7 @@ int main()
         // parallel compute no graphics
 
         // TODO: thread pooling
-        std::cout << "Thread count: " << static_cast<int>(num_threads) << '\n';
+        std::cout << "Thread count: " << num_threads << '\n';
 
         std::vector<unsigned int> NNList{1, 2, 4, 8, 16, 24};
         std::vector<std::thread> workers;

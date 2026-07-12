@@ -36,7 +36,7 @@ void Utilities::parallelSims(float cellSize, float width, float height, float sc
 {
     unsigned int terminationCount = 300;
 
-    Swarm swarm(cellSize, width, height, scaleFactor, seed, scaleNoise, neighborCount, v, numParticles);
+    Swarm swarm(cellSize, width, height, scaleFactor, seed, scaleNoise, neighborCount, v, numParticles, 1);
     
     while (true)
     {
