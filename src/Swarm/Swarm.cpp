@@ -35,8 +35,7 @@ void Swarm::nSquaredSense()
         }
 
         // now that we have a list of the n-nearest neighbor indices, we can perform the sensing step
-        float sinSum = particles[i].sinAngle;
-        float cosSum = particles[i].cosAngle;
+        glm::vec2 headingSum = particles[i].heading;
 
         for (unsigned int n = 0; n < nNeighbors; ++n)
         {
@@ -54,8 +53,7 @@ void Swarm::nSquaredSense()
                 float weight = 1.0f - (static_cast<float>(n) / static_cast<float>(nNeighbors + 1));;
                 // float weight = powf(0.5f, static_cast<float>(n));
 
-                sinSum += particles[neighborIdx].sinAngle * weight;
-                cosSum += particles[neighborIdx].cosAngle * weight;
+                headingSum += particles[neighborIdx].heading * weight;
             }
             else
             {
@@ -63,7 +61,7 @@ void Swarm::nSquaredSense()
             }
         }
         
-        targetAngles[i] = glm::atan(sinSum, cosSum) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
+        targetAngles[i] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
     }
 }
 
@@ -143,8 +141,7 @@ void Swarm::sense()
         }
 
         // now that we have a list of the n-nearest neighbor indices, we can perform the sensing step
-        float sinSum = particles[i].sinAngle;
-        float cosSum = particles[i].cosAngle;
+        glm::vec2 headingSum = particles[i].heading;
 
         for (unsigned int n = 0; n < nNeighbors; ++n)
         {
@@ -162,8 +159,7 @@ void Swarm::sense()
                 float weight = 1.0f - (static_cast<float>(n) / static_cast<float>(nNeighbors + 1));;
                 // float weight = powf(0.5f, static_cast<float>(n));
 
-                sinSum += particles[neighborIdx].sinAngle * weight;
-                cosSum += particles[neighborIdx].cosAngle * weight;
+                headingSum += particles[neighborIdx].heading * weight;
             }
             else
             {
@@ -171,7 +167,7 @@ void Swarm::sense()
             }
         }
         
-        targetAngles[i] = glm::atan(sinSum, cosSum) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
+        targetAngles[i] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
     }
 }
 
@@ -181,8 +177,7 @@ void Swarm::tradSense()
 
     for (unsigned int i = 0; i < particles.size(); ++i)
     {
-        float sinSum = particles[i].sinAngle;
-        float cosSum = particles[i].cosAngle;
+        glm::vec2 headingSum = particles[i].heading;
 
         unsigned int homeCell = grid.hash(particles[i]);
 
@@ -213,13 +208,12 @@ void Swarm::tradSense()
                         float weight = 1.0f;
                         // float weight = (distance < 0.1f) ? 1.0f / 0.1f : 1.0f / distance;
 
-                        sinSum += particles[j].sinAngle * weight;
-                        cosSum += particles[j].cosAngle * weight;
+                        headingSum += particles[j].heading * weight;
                     }
                 }
             }
         }
         
-        targetAngles[i] = glm::atan(sinSum, cosSum) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
+        targetAngles[i] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * dist(rng) - 1.0f);
     }
 }

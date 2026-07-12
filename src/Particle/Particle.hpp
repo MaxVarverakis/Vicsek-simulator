@@ -6,16 +6,14 @@
 
 struct Particle
 {
-    glm::vec2 position;
-    float velocity, angle; // angle in radians
-    float sinAngle, cosAngle;
+    glm::vec2 position, heading;
+    float velocity; //, angle; // angle in radians
+    // float sinAngle, cosAngle;
 
     Particle(glm::vec2 pos, float vel, float theta = 0.0f)
         : position { pos }
+        , heading { glm::cos(theta), glm::sin(theta) }
         , velocity { vel }
-        , angle { theta }
-        , sinAngle { glm::sin(angle) }
-        , cosAngle { glm::cos(angle) }
         {};
 
     void update(float dt, float x_max, float y_max, float v)
@@ -23,12 +21,8 @@ struct Particle
         // make sure |v| is updated to current global setting
         velocity = v;
 
-        // shift to [-pi, pi]
-        angle = std::remainderf(angle, 2.0f * PI);
-        sinAngle = glm::sin(angle);
-        cosAngle = glm::cos(angle);
-
-        position += velocity * glm::vec2(glm::cos(angle), glm::sin(angle)) * dt;
+        // position += velocity * glm::vec2(cosAngle, sinAngle) * dt;
+        position += velocity * heading * dt;
         applyPeriodicBC(x_max, y_max);
     }
 
@@ -41,11 +35,17 @@ struct Particle
         while (position.y < 0.0f) { position.y += y_max; }
     }
 
+    float angle()
+    {
+        return glm::atan(heading.y, heading.x);
+    }
+
     void printInfo()
     {
         std::cout << "x" << '\t' << position.x << '\n';
         std::cout << "y" << '\t' << position.y << '\n';
-        std::cout << "a" << '\t' << angle << '\n';
+        std::cout << "nx" << '\t' << heading.x << '\n';
+        std::cout << "ny" << '\t' << heading.y << '\n';
         std::cout << '\n';
     }
 };

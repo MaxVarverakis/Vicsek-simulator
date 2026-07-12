@@ -45,9 +45,11 @@ const float shape_scale { 3.0f / world_scale };
 const unsigned int numObjs { 20000 };
 const unsigned int neighborCount { 5 };
 const float DT { 0.025f };
+
 float v_magnitude { 200.0f };
 float noiseScale { 0.2f };
 unsigned int terminationCount = 300;
+
 bool color { true };
 bool alreadyDefault { false };
 bool ui_collapsed { true };
@@ -190,8 +192,6 @@ int main()
             Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs);
             const float width = swarm.x_max;
             const float height = swarm.y_max;
-            std::cout << "width:" << '\t' << width << '\n';
-            std::cout << "height:" << '\t' << height << '\n';
             
             window = SDL_CreateWindow("Window Title", 0.0f, 0.0f, static_cast<int>(width), static_cast<int>(height), SDL_WINDOW_OPENGL);
             gl_context = SDL_GL_CreateContext(window);
@@ -247,13 +247,20 @@ int main()
             }
             tri_VAO.addBuffer(tri_VBO, tri_layout);
 
-            VertexBuffer instanceVBO(swarm.modelMatrices.data(), static_cast<unsigned int>(swarm.modelMatrices.size() * sizeof(glm::mat4)), GL_DYNAMIC_DRAW);
-            tri_VAO.addInstancedBuffer(instanceVBO, 2, 16);
+            // VertexBuffer instanceVBO(swarm.modelMatrices.data(), static_cast<unsigned int>(swarm.modelMatrices.size() * sizeof(glm::mat4)), GL_DYNAMIC_DRAW);
+            // tri_VAO.addInstancedBuffer(instanceVBO, 2, 16);
+            
+            VertexBuffer instanceVBO(swarm.renderData.data(), static_cast<unsigned int>(swarm.renderData.size() * sizeof(swarm.renderData[0])), GL_DYNAMIC_DRAW);
+
+            VertexBufferLayout instanceLayout;
+            instanceLayout.push<float>(2); // position (loc = 2)
+            instanceLayout.push<float>(2); // heading  (loc = 3)
+            tri_VAO.addInstancedBuffer(instanceVBO, instanceLayout, 2);
 
             // swarm.colors.resize(numObjs, glm::vec4(1.0f));
             VertexBuffer colorInstanceVBO(swarm.colors.data(), static_cast<unsigned int>(swarm.colors.size() * sizeof(glm::vec4)), GL_DYNAMIC_DRAW);
-            // add to slot 6 since the instance mat4's take up 4 slots (2, 3, 4, 5)
-            tri_VAO.addInstancedBuffer(colorInstanceVBO, 6, 4);
+            // for modelMatrix approach, would add to slot 6 since the instance mat4's take up 4 slots (2, 3, 4, 5)
+            tri_VAO.addInstancedBuffer(colorInstanceVBO, 4, 4);
 
             // constructor automatically binds buffer
             IndexBuffer tri_IBO(triangles.m_indices.data(), static_cast<unsigned int>(triangles.m_indices.size()));
@@ -269,6 +276,7 @@ int main()
             Shader tri_shader("/Users/max/UCLA/Research/Codes/Vicsek/shaders", "circle_cheat_");
             tri_shader.bind();
             tri_shader.setUniformMatrix4fv("u_MVP", MVP);
+            tri_shader.setUniform1f("u_scale", shape_scale);
 
             tri_VBO.unbind();
             tri_VAO.unbind();
@@ -317,6 +325,9 @@ int main()
                 ImGui::NewFrame();
                 imguiWindow(io, swarm);
                 
+                // always update colors even if paused
+                swarm.colors_bool = color;
+
                 // evolve time if unpaused
                 if (not paused)
                 {
@@ -344,9 +355,6 @@ int main()
                     swarm.updateParticles(DT);
                     step = false;
                 }
-                
-                // always update colors even if paused
-                swarm.colors_bool = color;
 
                 // updating and rendering stuff happens here
                 
@@ -372,7 +380,8 @@ int main()
                 }
 
                 // auto r1 = std::chrono::high_resolution_clock::now();
-                instanceVBO.updateBuffer(swarm.modelMatrices.data());
+                // instanceVBO.updateBuffer(swarm.modelMatrices.data());
+                instanceVBO.updateBuffer(swarm.renderData.data());
 
                 // auto r2 = std::chrono::high_resolution_clock::now();
                 renderer.clear();

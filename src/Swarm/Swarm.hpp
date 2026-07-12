@@ -31,6 +31,7 @@ struct Swarm
     std::vector<float> targetAngles;
     std::vector<Particle> particles;
     std::vector<glm::mat4> modelMatrices;
+    std::vector<glm::vec4> renderData; // (x, y, heading.x, heading.y)
     
     float order_param;
     bool colors_bool;
@@ -74,7 +75,8 @@ struct Swarm
         , velocity { v }
         , particles { pts }
     {
-        generateModelMatrices();
+        generateRenderData();
+        // generateModelMatrices();
         scratch_neighborIds.resize(nNeighbors, 0);
         scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
     }
@@ -92,6 +94,8 @@ struct Swarm
     {
         particles.reserve(numParticles);
         targetAngles.resize(numParticles);
+        // modelMatrices.reserve(numParticles);
+        renderData.reserve(numParticles);
         scratch_neighborIds.resize(nNeighbors, 0);
         scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
 
@@ -116,8 +120,9 @@ struct Swarm
     void addParticle(Particle& particle)
     {
         particles.emplace_back(particle);
-        modelMatrices.emplace_back(generateModelMatrix(particle));
-        colors.emplace_back(Utilities::cycle_angle_to_color(particle.angle));
+        // modelMatrices.emplace_back(generateModelMatrix(particle));
+        renderData.emplace_back(generateParticleRenderData(particle));
+        colors.emplace_back(Utilities::cycle_angle_to_color(particle.angle()));
     }
     
     void nSquaredSense();
@@ -149,21 +154,26 @@ struct Swarm
             Particle& particle { particles[i] };
 
             // prevent instant 180s
-            float angleChange = targetAngles[i] - particle.angle;
+
+
+            float angle = particle.angle();
+            float angleChange = targetAngles[i] - angle;
             while (angleChange < -PI) { angleChange += 2.0f * PI; }
             while (angleChange > PI) { angleChange -= 2.0f * PI; }
             float max_angle_change = max_turn_speed * dt;
-            particle.angle += glm::clamp(angleChange, -max_angle_change, max_angle_change);
+            angle += glm::clamp(angleChange, -max_angle_change, max_angle_change);
+            particle.heading = glm::vec2(glm::cos(angle), glm::sin(angle));
 
             // enable instant 180s
-            // particle.angle = targetAngles[i];
+            // particle.heading = glm::vec2(glm::cos(targetAngles[i]), glm::sin(targetAngles[i]));
             
             particle.update(dt, x_max, y_max, velocity);
-            modelMatrices[i] = generateModelMatrix(particle);
+            // modelMatrices[i] = generateModelMatrix(particle);
+            renderData[i] = generateParticleRenderData(particle);
 
-            if (colors_bool) { colors[i] = Utilities::cycle_angle_to_color(particle.angle); }
+            if (colors_bool) { colors[i] = Utilities::cycle_angle_to_color(particle.angle()); }
 
-            v_hat_sum += glm::vec2(glm::cos(particle.angle), glm::sin(particle.angle));
+            v_hat_sum += particle.heading;
         }
 
         order_param = glm::length(v_hat_sum) / static_cast<float>(particles.size());
@@ -173,19 +183,33 @@ struct Swarm
     {
         glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(particle.position, 0.0f));
         // render-space 0 degrees is vertical (+yhat direction) as opposed to +xhat direction
-        modelMatrix = glm::rotate(modelMatrix, particle.angle - glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        modelMatrix = glm::rotate(modelMatrix, particle.angle() - glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
         return glm::scale(modelMatrix, glm::vec3(scale, scale, 1.0f));
+    }
+    
+    glm::vec4 generateParticleRenderData(Particle& particle)
+    {
+        return glm::vec4(particle.position, particle.heading);
     }
 
     void generateModelMatrices()
     {
-        std::vector<glm::mat4> matrices;
-        matrices.reserve(particles.size());
+        modelMatrices.reserve(particles.size());
 
         for (Particle& particle : particles)
         {
-            matrices.emplace_back(generateModelMatrix(particle));
+            modelMatrices.emplace_back(generateModelMatrix(particle));
+        }
+    }
+    
+    void generateRenderData()
+    {
+        renderData.reserve(particles.size());
+
+        for (Particle& particle : particles)
+        {
+            renderData.emplace_back(generateParticleRenderData(particle));
         }
     }
 
