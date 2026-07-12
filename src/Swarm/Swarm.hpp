@@ -29,24 +29,11 @@ struct Swarm
     std::vector<unsigned int> scratch_neighborIds;
     std::vector<float> scratch_distances;
     std::vector<float> targetAngles;
-    std::vector<Particle> particles;
-    std::vector<glm::mat4> modelMatrices;
-    std::vector<glm::vec4> renderData; // (x, y, heading.x, heading.y)
+    std::vector<glm::vec2> positions, headings;
     
     float order_param;
     bool colors_bool;
     std::vector<glm::vec4> colors;
-
-    void printParticleInfo()
-    {
-        for (unsigned int i = 0; i < particles.size(); ++i)
-        {
-            Particle& particle = particles[i];
-            std::cout << "idx" << '\t' << i << '\n';
-            particle.printInfo();
-            std::cout << '\n';
-        }
-    }
 
     Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v)
         : grid(cellSize, width, height)
@@ -63,7 +50,7 @@ struct Swarm
         scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
     };
     
-    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, std::vector<Particle> pts)
+    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, std::vector<glm::vec2> pos, std::vector<glm::vec2> directions)
         : grid(cellSize, width, height)
         , x_max { cellSize * grid.nX }
         , y_max { cellSize * grid.nY }
@@ -73,10 +60,9 @@ struct Swarm
         , noiseScale { scaleNoise }
         , nNeighbors { neighborCount }
         , velocity { v }
-        , particles { pts }
+        , positions { pos }
+        , headings { directions }
     {
-        generateRenderData();
-        // generateModelMatrices();
         scratch_neighborIds.resize(nNeighbors, 0);
         scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
     }
@@ -92,126 +78,101 @@ struct Swarm
         , nNeighbors { neighborCount }
         , velocity { v }
     {
-        particles.reserve(numParticles);
+        positions.reserve(numParticles);
+        headings.reserve(numParticles);
         targetAngles.resize(numParticles);
-        // modelMatrices.reserve(numParticles);
-        renderData.reserve(numParticles);
         scratch_neighborIds.resize(nNeighbors, 0);
         scratch_distances.resize(nNeighbors, std::numeric_limits<float>::infinity());
 
-        if (colors_bool && (colors.size() < particles.size()))
+        if (colors_bool && (colors.size() < positions.size()))
         {
-            colors.reserve(particles.size());
+            colors.reserve(positions.size());
         }
 
         // generate random particles
         for (unsigned int i = 0; i < numParticles; ++i)
         {
-            Particle particle(
-                glm::vec2(x_max * dist(rng), y_max * dist(rng)),
-                velocity,
-                PI * (2.0f * dist(rng) - 1.0f)
+            float angle = PI * (2.0f * dist(rng) - 1.0f);
+            positions.emplace_back(
+                glm::vec2(x_max * dist(rng), y_max * dist(rng))
             );
-            
-            addParticle(particle);
+            headings.emplace_back(
+                glm::cos(angle), glm::sin(angle)
+            );
+            colors.emplace_back(Utilities::cycle_angle_to_color(angle));
         }
     }
 
-    void addParticle(Particle& particle)
+    void applyPeriodicBC(glm::vec2& position)
     {
-        particles.emplace_back(particle);
-        // modelMatrices.emplace_back(generateModelMatrix(particle));
-        renderData.emplace_back(generateParticleRenderData(particle));
-        colors.emplace_back(Utilities::cycle_angle_to_color(particle.angle()));
+        if (position.x >= x_max) { position.x -= x_max; }
+        else if (position.x < 0.0f) { position.x += x_max; }
+
+        if (position.y >= y_max) { position.y -= y_max; }
+        else if (position.y < 0.0f) { position.y += y_max; }
     }
+
+    void nsSense(unsigned int pID);
     
-    void nSquaredSense();
+    void sense(unsigned int pID);
     
-    void sense();
-    
-    void tradSense();
-    
-    void updateParticles(float dt)
+    void tradSense(unsigned int pID);
+
+    void updateParticle(unsigned int pID, float dt)
     {
-        if (colors_bool && (colors.size() < particles.size()))
-        {
-            colors.resize(particles.size(), glm::vec4(1.0f));
-        }
-
-        glm::vec2 v_hat_sum(0.0f);
-
         // I'm a little skeptical on doing this rather than just 
         // setting a max angle change outright
-        const float max_turn_speed = 2.0f * PI;
+        static const float max_turn_speed = 2.0f * PI;
+
+        // prevent instant 180s
+        float angle = glm::atan(headings[pID].y, headings[pID].x);
+        float angleChange = targetAngles[pID] - angle;
+        while (angleChange < -PI) { angleChange += 2.0f * PI; }
+        while (angleChange > PI) { angleChange -= 2.0f * PI; }
+        float max_angle_change = max_turn_speed * dt;
+        angle += glm::clamp(angleChange, -max_angle_change, max_angle_change);
+        headings[pID] = glm::vec2(glm::cos(angle), glm::sin(angle));
+
+        // enable instant 180s
+        // headings[pID] = glm::vec2(glm::cos(targetAngles[pID]), glm::sin(targetAngles[pID]));
+        
+        positions[pID] += velocity * headings[pID] * dt;
+        applyPeriodicBC(positions[pID]);
+
+        if (colors_bool) { colors[pID] = Utilities::cycle_angle_to_color(angle); }
+    }
+
+    void update(float dt)
+    {
+        if (colors_bool && (colors.size() < positions.size()))
+        {
+            colors.resize(positions.size(), glm::vec4(1.0f));
+        }
+
+        float v_hat_x = 0.0f;
+        float v_hat_y = 0.0f;
 
         // build the sorted gridParticles of SHG before sensing!
-        grid.build(particles);
-        sense();
+        auto t0 = std::chrono::high_resolution_clock::now();
+        grid.build(positions);
+        auto t1 = std::chrono::high_resolution_clock::now();
+        for (unsigned int i = 0; i < positions.size(); ++i) { sense(i); }
+        auto t2 = std::chrono::high_resolution_clock::now();
         // tradSense();
 
-        for (unsigned int i = 0; i < particles.size(); ++i)
+        std::cout << '\n';
+        std::cout << "build" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0 << " ms" << '\n';
+        std::cout << "sense" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0 << " ms" << '\n';
+
+        #pragma omp parallel for reduction(+:v_hat_x,v_hat_y)
+        for (unsigned int i = 0; i < positions.size(); ++i)
         {
-            Particle& particle { particles[i] };
+            updateParticle(i, dt);
 
-            // prevent instant 180s
-
-
-            float angle = particle.angle();
-            float angleChange = targetAngles[i] - angle;
-            while (angleChange < -PI) { angleChange += 2.0f * PI; }
-            while (angleChange > PI) { angleChange -= 2.0f * PI; }
-            float max_angle_change = max_turn_speed * dt;
-            angle += glm::clamp(angleChange, -max_angle_change, max_angle_change);
-            particle.heading = glm::vec2(glm::cos(angle), glm::sin(angle));
-
-            // enable instant 180s
-            // particle.heading = glm::vec2(glm::cos(targetAngles[i]), glm::sin(targetAngles[i]));
-            
-            particle.update(dt, x_max, y_max, velocity);
-            // modelMatrices[i] = generateModelMatrix(particle);
-            renderData[i] = generateParticleRenderData(particle);
-
-            if (colors_bool) { colors[i] = Utilities::cycle_angle_to_color(particle.angle()); }
-
-            v_hat_sum += particle.heading;
+            v_hat_x += headings[i].x;
+            v_hat_y += headings[i].y;
         }
 
-        order_param = glm::length(v_hat_sum) / static_cast<float>(particles.size());
+        order_param = glm::length(glm::vec2(v_hat_x, v_hat_y)) / static_cast<float>(positions.size());
     }
-
-    glm::mat4 generateModelMatrix(Particle& particle)
-    {
-        glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(particle.position, 0.0f));
-        // render-space 0 degrees is vertical (+yhat direction) as opposed to +xhat direction
-        modelMatrix = glm::rotate(modelMatrix, particle.angle() - glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-
-        return glm::scale(modelMatrix, glm::vec3(scale, scale, 1.0f));
-    }
-    
-    glm::vec4 generateParticleRenderData(Particle& particle)
-    {
-        return glm::vec4(particle.position, particle.heading);
-    }
-
-    void generateModelMatrices()
-    {
-        modelMatrices.reserve(particles.size());
-
-        for (Particle& particle : particles)
-        {
-            modelMatrices.emplace_back(generateModelMatrix(particle));
-        }
-    }
-    
-    void generateRenderData()
-    {
-        renderData.reserve(particles.size());
-
-        for (Particle& particle : particles)
-        {
-            renderData.emplace_back(generateParticleRenderData(particle));
-        }
-    }
-
-    
 };

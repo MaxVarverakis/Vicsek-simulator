@@ -11,18 +11,18 @@ SpatialHashGrid::SpatialHashGrid(float size, float width, float height)
     scannedCells.resize(numCells);
 }
 
-unsigned int SpatialHashGrid::hash(const Particle& particle)
+unsigned int SpatialHashGrid::hash(const glm::vec2& position)
 {
     unsigned int X = static_cast<unsigned int>(
         std::clamp(
-            static_cast<int>(particle.position.x / cellSize),
+            static_cast<int>(position.x / cellSize),
             0,
             static_cast<int>(nX - 1)
         )
     );
     unsigned int Y = static_cast<unsigned int>(
         std::clamp(
-            static_cast<int>(particle.position.y / cellSize),
+            static_cast<int>(position.y / cellSize),
             0,
             static_cast<int>(nY - 1)
         )
@@ -32,12 +32,12 @@ unsigned int SpatialHashGrid::hash(const Particle& particle)
     return X + Y * nX;
 }
 
-void SpatialHashGrid::build(const std::vector<Particle>& particles)
+void SpatialHashGrid::build(const std::vector<glm::vec2>& positions)
 {
-    if (gridParticles.size() != particles.size())
+    if (gridParticles.size() != positions.size())
     {
-        gridParticles.resize(particles.size());
-        cellIDs.resize(particles.size());
+        gridParticles.resize(positions.size());
+        cellIDs.resize(positions.size());
     }
 
     // clear the offsets from previous build
@@ -46,7 +46,7 @@ void SpatialHashGrid::build(const std::vector<Particle>& particles)
     // get counts
     for (unsigned int i = 0; i < gridParticles.size(); ++i)
     {
-        unsigned int cellID = hash(particles[i]);
+        unsigned int cellID = hash(positions[i]);
         cellIDs[i] = cellID;
         cellOffsets[cellID] += 1;
     }
@@ -71,35 +71,6 @@ void SpatialHashGrid::build(const std::vector<Particle>& particles)
         unsigned int offset = offsetCopy[cellIDs[i]]++;
         gridParticles[offset] = i;
     }
-}
-
-std::vector<unsigned int> SpatialHashGrid::neighbors(unsigned int cellID)
-{
-    // only works for levels 0+1
-    // w, e, n, s, nw, ne, sw, se
-
-    // un-flatten the indices
-    unsigned int X = cellID % nX;
-    unsigned int Y = cellID / nX;
-
-    unsigned int lX = (X == 0) ? nX - 1 : X - 1;
-    unsigned int rX = (X == nX - 1) ? 0 : X + 1;
-    
-    unsigned int dY = (Y == 0) ? nY - 1 : Y - 1;
-    unsigned int uY = (Y == nY - 1) ? 0 : Y + 1;
-
-    // convert back to flattened indices (row-major)
-    unsigned int  w = lX +  Y * nX;
-    unsigned int  e = rX +  Y * nX;
-    unsigned int  n =  X + uY * nX;
-    unsigned int  s =  X + dY * nX;
-    
-    unsigned int nw = lX + uY * nX;
-    unsigned int ne = rX + uY * nX;
-    unsigned int sw = lX + dY * nX;
-    unsigned int se = rX + dY * nX;
-
-    return { w, e, n, s, nw, ne, sw, se };
 }
 
 void SpatialHashGrid::getCellsAtLevel(unsigned int cellID, unsigned int level, unsigned int particleIdx)
@@ -161,4 +132,33 @@ void SpatialHashGrid::getCellsAtLevel(unsigned int cellID, unsigned int level, u
             }
         }
     }
+}
+
+std::vector<unsigned int> SpatialHashGrid::neighbors(unsigned int cellID)
+{
+    // only works for levels 0+1
+    // w, e, n, s, nw, ne, sw, se
+
+    // un-flatten the indices
+    unsigned int X = cellID % nX;
+    unsigned int Y = cellID / nX;
+
+    unsigned int lX = (X == 0) ? nX - 1 : X - 1;
+    unsigned int rX = (X == nX - 1) ? 0 : X + 1;
+    
+    unsigned int dY = (Y == 0) ? nY - 1 : Y - 1;
+    unsigned int uY = (Y == nY - 1) ? 0 : Y + 1;
+
+    // convert back to flattened indices (row-major)
+    unsigned int  w = lX +  Y * nX;
+    unsigned int  e = rX +  Y * nX;
+    unsigned int  n =  X + uY * nX;
+    unsigned int  s =  X + dY * nX;
+    
+    unsigned int nw = lX + uY * nX;
+    unsigned int ne = rX + uY * nX;
+    unsigned int sw = lX + dY * nX;
+    unsigned int se = rX + dY * nX;
+
+    return { w, e, n, s, nw, ne, sw, se };
 }

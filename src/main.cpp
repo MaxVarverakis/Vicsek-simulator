@@ -195,7 +195,7 @@ int main()
             
             window = SDL_CreateWindow("Window Title", 0.0f, 0.0f, static_cast<int>(width), static_cast<int>(height), SDL_WINDOW_OPENGL);
             gl_context = SDL_GL_CreateContext(window);
-            SDL_GL_SetSwapInterval(1);
+            SDL_GL_SetSwapInterval(0);
 
             // Setup Dear ImGui context
             IMGUI_CHECKVERSION();
@@ -246,21 +246,17 @@ int main()
                 tri_layout.push<float>(Triangle::layout_descriptor[i]);
             }
             tri_VAO.addBuffer(tri_VBO, tri_layout);
-
-            // VertexBuffer instanceVBO(swarm.modelMatrices.data(), static_cast<unsigned int>(swarm.modelMatrices.size() * sizeof(glm::mat4)), GL_DYNAMIC_DRAW);
-            // tri_VAO.addInstancedBuffer(instanceVBO, 2, 16);
             
-            VertexBuffer instanceVBO(swarm.renderData.data(), static_cast<unsigned int>(swarm.renderData.size() * sizeof(swarm.renderData[0])), GL_DYNAMIC_DRAW);
+            VertexBuffer posInstanceVBO(swarm.positions.data(), static_cast<unsigned int>(swarm.positions.size() * sizeof(swarm.positions[0])), GL_DYNAMIC_DRAW);
+            VertexBuffer dirInstanceVBO(swarm.headings.data(), static_cast<unsigned int>(swarm.headings.size() * sizeof(swarm.headings[0])), GL_DYNAMIC_DRAW);
 
-            VertexBufferLayout instanceLayout;
-            instanceLayout.push<float>(2); // position (loc = 2)
-            instanceLayout.push<float>(2); // heading  (loc = 3)
-            tri_VAO.addInstancedBuffer(instanceVBO, instanceLayout, 2);
+            tri_VAO.addInstancedBuffer(posInstanceVBO, 2, 2); // location = 2
+            tri_VAO.addInstancedBuffer(dirInstanceVBO, 2, 3); // location = 3
 
             // swarm.colors.resize(numObjs, glm::vec4(1.0f));
-            VertexBuffer colorInstanceVBO(swarm.colors.data(), static_cast<unsigned int>(swarm.colors.size() * sizeof(glm::vec4)), GL_DYNAMIC_DRAW);
+            VertexBuffer colorInstanceVBO(swarm.colors.data(), static_cast<unsigned int>(swarm.colors.size() * sizeof(swarm.colors[0])), GL_DYNAMIC_DRAW);
             // for modelMatrix approach, would add to slot 6 since the instance mat4's take up 4 slots (2, 3, 4, 5)
-            tri_VAO.addInstancedBuffer(colorInstanceVBO, 4, 4);
+            tri_VAO.addInstancedBuffer(colorInstanceVBO, 4, 4); // location = 4
 
             // constructor automatically binds buffer
             IndexBuffer tri_IBO(triangles.m_indices.data(), static_cast<unsigned int>(triangles.m_indices.size()));
@@ -272,7 +268,6 @@ int main()
             glm::mat4 MVP { proj * view * model };
 
             // tri_shader stuff happens here
-            // Shader tri_shader("/Users/max/OpenGL_Framework/res/shaders", "triangle_");
             Shader tri_shader("/Users/max/UCLA/Research/Codes/Vicsek/shaders", "circle_cheat_");
             tri_shader.bind();
             tri_shader.setUniformMatrix4fv("u_MVP", MVP);
@@ -328,12 +323,13 @@ int main()
                 // always update colors even if paused
                 swarm.colors_bool = color;
 
+                // auto t0 = std::chrono::high_resolution_clock::now();
                 // evolve time if unpaused
                 if (not paused)
                 {
                     swarm.velocity = v_magnitude;
                     swarm.noiseScale = noiseScale;
-                    swarm.updateParticles(DT);
+                    swarm.update(DT);
                     // noiseScale = std::max<float>(noiseScale - DT / 64.0f, 0.0f);
                     // swarm.noiseScale = noiseScale;
                     // // std::cout << noiseScale << '\n';
@@ -352,17 +348,15 @@ int main()
                 {
                     swarm.velocity = v_magnitude;
                     swarm.noiseScale = noiseScale;
-                    swarm.updateParticles(DT);
+                    swarm.update(DT);
                     step = false;
                 }
-
+                // auto t1 = std::chrono::high_resolution_clock::now();
                 // updating and rendering stuff happens here
                 
-                // auto r0 = std::chrono::high_resolution_clock::now();
                 // update buffers (position, color, alpha)
                 if (color)
                 {
-                    // triangles.udpateColors(swarm.colors);
                     colorInstanceVBO.updateBuffer(swarm.colors.data());
 
                     if (alreadyDefault)
@@ -378,13 +372,15 @@ int main()
                         alreadyDefault = !alreadyDefault;
                     }
                 }
+                // auto t2 = std::chrono::high_resolution_clock::now();
 
-                // auto r1 = std::chrono::high_resolution_clock::now();
-                // instanceVBO.updateBuffer(swarm.modelMatrices.data());
-                instanceVBO.updateBuffer(swarm.renderData.data());
+                posInstanceVBO.updateBuffer(swarm.positions.data());
+                dirInstanceVBO.updateBuffer(swarm.headings.data());
+                // auto t3 = std::chrono::high_resolution_clock::now();
 
                 // auto r2 = std::chrono::high_resolution_clock::now();
                 renderer.clear();
+                // auto t4 = std::chrono::high_resolution_clock::now();
 
                 // draw objects
                 // auto r3 = std::chrono::high_resolution_clock::now();
@@ -392,6 +388,7 @@ int main()
                 // glBeginQuery(GL_SAMPLES_PASSED, query);
                 // glBeginQuery(GL_TIME_ELAPSED, query);
                 renderer.drawTriangles(tri_VAO, tri_IBO, tri_shader, static_cast<int>(numObjs));
+                // auto t5 = std::chrono::high_resolution_clock::now();
                 // glEndQuery(GL_TIME_ELAPSED);
                 // GLuint64 ns;
                 // glGetQueryObjectui64v(query,
@@ -434,12 +431,11 @@ int main()
                 // if (!paused)
                 // {
                 //     std::cout << '\n';
-                //     std::cout << "color upload" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r1 - r0).count() / 1000.0 << " ms" << '\n';
-                //     std::cout << "matrix upload" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r2 - r1).count() / 1000.0 << " ms" << '\n';
-                //     std::cout << "render clear" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r3 - r2).count() / 1000.0 << " ms" << '\n';
-                //     std::cout << "draw" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r4 - r3).count() / 1000.0 << " ms" << '\n';
-                //     std::cout << "imgui" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r5 - r4).count() / 1000.0 << " ms" << '\n';
-                //     std::cout << "swap" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(r6 - r5).count() / 1000.0 << " ms" << '\n';
+                //     std::cout << "sim" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0 << " ms" << '\n';
+                //     std::cout << "color buffer" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0 << " ms" << '\n';
+                //     std::cout << "renderData buffer" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() / 1000.0 << " ms" << '\n';
+                //     std::cout << "clear renderer" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() / 1000.0 << " ms" << '\n';
+                //     std::cout << "draw" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4).count() / 1000.0 << " ms" << '\n';
                 // }
             }
 

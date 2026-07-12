@@ -4,8 +4,6 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
-#include "../Particle/Particle.hpp"
-
 struct SpatialHashGrid
 {
     float cellSize;
@@ -18,8 +16,8 @@ struct SpatialHashGrid
 
     SpatialHashGrid(float size, float width, float height);
 
-    unsigned int hash(const Particle& particle);
-    void build(const std::vector<Particle>& particles);
+    unsigned int hash(const glm::vec2& position);
+    void build(const std::vector<glm::vec2>& positions);
     std::vector<unsigned int> neighbors(unsigned int cellID);
     void getCellsAtLevel(unsigned int cellID, unsigned int level, unsigned int particleIdx);
 };
