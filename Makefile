@@ -68,4 +68,7 @@ debug:
 clean:
 	rm -rf $(BUILD_DIR)
 
+run: $(TARGET)
+	OMP_PROC_BIND=true OMP_PLACES=cores ./$(TARGET)
+
 .PHONY: all clean

@@ -4,10 +4,11 @@ layout (location = 0) in vec2 aPos;
 layout (location = 1) in vec4 aColor;
 layout (location = 2) in vec2 position;
 layout (location = 3) in vec2 heading;
-layout (location = 4) in vec4 aInstanceColor;
+// layout (location = 4) in vec4 aInstanceColor;
 
 uniform mat4 u_MVP;
 uniform float u_scale;
+uniform bool u_color;
 
 out vec4 v_Color;
 out vec2 v_UV;
@@ -23,5 +24,19 @@ void main()
 
     gl_Position = u_MVP * vec4(p, 0.0, 1.0);
     v_UV = aPos.xy;
-    v_Color = aInstanceColor;
+
+    float angle = atan(heading.y, heading.x);
+    
+    if (u_color)
+    {
+        float PI = 3.1415926535897932384626433832795;
+        float r = sin(angle) * 0.5 + 0.5;
+        float g = sin(angle + 2.0 * PI / 3.0) * 0.5 + 0.5;
+        float b = sin(angle + 4.0 * PI / 3.0) * 0.5 + 0.5;
+        v_Color = vec4(r, g, b, 1.0);
+    }
+    else
+    {
+        v_Color = vec4(1.0, 1.0, 1.0, 1.0);
+    }
 }

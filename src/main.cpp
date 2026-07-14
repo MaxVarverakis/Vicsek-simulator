@@ -5,6 +5,11 @@
 #include <iomanip>
 #include <chrono>
 
+// set priority
+#include <unistd.h>
+#include <cerrno>
+#include <sys/resource.h>
+
 // OpenGL helpers
 #include "VertexBuffer/VertexBuffer.hpp"
 #include "IndexBuffer/IndexBuffer.hpp"
@@ -41,9 +46,9 @@ const float targetHeight { 846.0f / world_scale };
 
 // project-specific settings
 // const float shape_scale { 1 / 64.0f };
-const float shape_scale { 2.0f / world_scale };
-const unsigned int numObjs { 80000 };
-const unsigned int neighborCount { 4 };
+const float shape_scale { 1.5f / world_scale };
+const unsigned int numObjs { 200000 };
+const unsigned int neighborCount { 5 };
 const float DT { 0.025f };
 
 float v_magnitude { 200.0f };
@@ -190,6 +195,7 @@ int main()
             // initialize swarm up here so that we can use the SHG-adjusted width/height to fit the window perfectly
             // specifying the number of agents automatically generates random particles
             Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs, num_threads);
+            // Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, 1809793370, noiseScale, neighborCount, v_magnitude, numObjs, num_threads);
             const float width = swarm.x_max;
             const float height = swarm.y_max;
             
@@ -223,6 +229,20 @@ int main()
             // GLCall(glEnable(GL_MULTISAMPLE));
 
             printKey();
+            std::cout << "seed" << '\t' << swarm.master_seed << '\n' << '\n';
+            // stable band
+            // NN = 5, n = 200k
+            // 61948080
+            // NN = 4, n = 80k
+            // 3944867084
+            // NN = 6, n = 50k
+            // 862114325
+
+            // cool
+            // NN = 5, n = 200k (also cool with eta ~ 0.4-0.5)
+            // 1895964381
+            // NN = 4, n = 80k
+            // 3716529747
 
             // buffer stuff and initialization happens here
             std::vector<Triangle> tris;
@@ -253,11 +273,6 @@ int main()
             tri_VAO.addInstancedBuffer(posInstanceVBO, 2, 2); // location = 2
             tri_VAO.addInstancedBuffer(dirInstanceVBO, 2, 3); // location = 3
 
-            // swarm.colors.resize(numObjs, glm::vec4(1.0f));
-            VertexBuffer colorInstanceVBO(swarm.colors.data(), static_cast<unsigned int>(swarm.colors.size() * sizeof(swarm.colors[0])), GL_DYNAMIC_DRAW);
-            // for modelMatrix approach, would add to slot 6 since the instance mat4's take up 4 slots (2, 3, 4, 5)
-            tri_VAO.addInstancedBuffer(colorInstanceVBO, 4, 4); // location = 4
-
             // constructor automatically binds buffer
             IndexBuffer tri_IBO(triangles.m_indices.data(), static_cast<unsigned int>(triangles.m_indices.size()));
 
@@ -267,16 +282,17 @@ int main()
             glm::mat4 model { glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) };
             glm::mat4 MVP { proj * view * model };
 
-            // tri_shader stuff happens here
-            Shader tri_shader("/Users/max/UCLA/Research/Codes/Vicsek/shaders", "circle_cheat_");
-            tri_shader.bind();
-            tri_shader.setUniformMatrix4fv("u_MVP", MVP);
-            tri_shader.setUniform1f("u_scale", shape_scale);
+            // shader stuff happens here
+            Shader shader("/Users/max/UCLA/Research/Codes/Vicsek/shaders", "circle_cheat_");
+            shader.bind();
+            shader.setUniformMatrix4fv("u_MVP", MVP);
+            shader.setUniform1f("u_scale", shape_scale);
+            shader.setUniform1f("u_color", color);
 
             tri_VBO.unbind();
             tri_VAO.unbind();
             tri_IBO.unbind();
-            tri_shader.unbind();
+            shader.unbind();
 
             Renderer renderer;
 
@@ -284,18 +300,8 @@ int main()
             SDL_Event event;
             is_running = true;
 
-            // Uint64 lastTime = SDL_GetPerformanceCounter();
-            // GLuint query;
-            // glGenQueries(1, &query);
-
             while(is_running)
             {
-                // Calculate dynamic dt at the very start of the frame
-                // Uint64 currentTime = SDL_GetPerformanceCounter();
-                // float dt = static_cast<float>(currentTime - lastTime) / static_cast<float>(SDL_GetPerformanceFrequency());
-                // lastTime = currentTime;
-                // if (dt > 0.1f) dt = 0.1f;
-
                 while(SDL_PollEvent(&event))
                 {
                     // (Where your code calls SDL_PollEvent())
@@ -319,11 +325,7 @@ int main()
                 ImGui_ImplSDL2_NewFrame();
                 ImGui::NewFrame();
                 imguiWindow(io, swarm);
-                
-                // always update colors even if paused
-                swarm.colors_bool = color;
 
-                // auto t0 = std::chrono::high_resolution_clock::now();
                 // evolve time if unpaused
                 if (not paused)
                 {
@@ -351,92 +353,28 @@ int main()
                     swarm.update(DT);
                     step = false;
                 }
-                // auto t1 = std::chrono::high_resolution_clock::now();
-                // updating and rendering stuff happens here
                 
+                // updating and rendering stuff happens here
                 // update buffers (position, color, alpha)
-                if (color)
-                {
-                    colorInstanceVBO.updateBuffer(swarm.colors.data());
-
-                    if (alreadyDefault)
-                    {
-                        alreadyDefault = !alreadyDefault;
-                    }
-                }
-                else
-                {
-                    if (!alreadyDefault)
-                    {
-                        colorInstanceVBO.updateBuffer(defaultColors.data());
-                        alreadyDefault = !alreadyDefault;
-                    }
-                }
-                // auto t2 = std::chrono::high_resolution_clock::now();
-
                 posInstanceVBO.updateBuffer(swarm.positions.data());
                 dirInstanceVBO.updateBuffer(swarm.headings.data());
-                // auto t3 = std::chrono::high_resolution_clock::now();
 
-                // auto r2 = std::chrono::high_resolution_clock::now();
+                shader.bind();
+                shader.setUniform1f("u_color", color);
+                shader.unbind();
+
                 renderer.clear();
-                // auto t4 = std::chrono::high_resolution_clock::now();
 
                 // draw objects
-                // auto r3 = std::chrono::high_resolution_clock::now();
-
-                // glBeginQuery(GL_SAMPLES_PASSED, query);
-                // glBeginQuery(GL_TIME_ELAPSED, query);
-                renderer.drawTriangles(tri_VAO, tri_IBO, tri_shader, static_cast<int>(numObjs));
-                // auto t5 = std::chrono::high_resolution_clock::now();
-                // glEndQuery(GL_TIME_ELAPSED);
-                // GLuint64 ns;
-                // glGetQueryObjectui64v(query,
-                //                     GL_QUERY_RESULT,
-                //                     &ns);
-
-                // std::cout
-                // << ns / 1000000.0
-                // << '\n';
-                // glEndQuery(GL_SAMPLES_PASSED);
-
-                // GLuint samples;
-                // glGetQueryObjectuiv(query,
-                //                     GL_QUERY_RESULT,
-                //                     &samples);
-                // std::cout << samples << std::endl;
-
-                // auto t0 = std::chrono::high_resolution_clock::now();
-
-                // glFinish();
-
-                // auto t1 = std::chrono::high_resolution_clock::now();
-
-                // std::cout
-                //     << "glFinish: "
-                //     << std::chrono::duration<double, std::milli>(t1 - t0).count()
-                //     << '\n';
+                renderer.drawTriangles(tri_VAO, tri_IBO, shader, static_cast<int>(numObjs));
 
                 // Dear ImGui Rendering
                 // (Your code clears your framebuffer, renders your other stuff etc.)
-                // auto r4 = std::chrono::high_resolution_clock::now();
                 ImGui::Render();
                 ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
                 // (Your code calls SDL_GL_SwapWindow() etc.)
 
-                // auto r5 = std::chrono::high_resolution_clock::now();
                 SDL_GL_SwapWindow(window);
-                // auto r6 = std::chrono::high_resolution_clock::now();
-
-                // if (!paused)
-                // {
-                //     std::cout << '\n';
-                //     std::cout << "sim" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0 << " ms" << '\n';
-                //     std::cout << "color buffer" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0 << " ms" << '\n';
-                //     std::cout << "renderData buffer" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() / 1000.0 << " ms" << '\n';
-                //     std::cout << "clear renderer" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() / 1000.0 << " ms" << '\n';
-                //     std::cout << "draw" << '\t' << std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4).count() / 1000.0 << " ms" << '\n';
-                // }
             }
 
             // glDeleteQueries(1,&query);

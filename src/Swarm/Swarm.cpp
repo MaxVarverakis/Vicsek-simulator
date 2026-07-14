@@ -1,153 +1,82 @@
 #include "Swarm.hpp"
 
-void Swarm::nsSense(unsigned int pID)
-{
-    unsigned int tid = static_cast<unsigned int>(omp_get_thread_num());
-
-    unsigned int* ids = scratch_neighborIds.data() + tid * nNeighbors;
-    float* dist = scratch_distances.data() + tid * nNeighbors;
-
-    std::fill(ids, ids + nNeighbors, 0);
-    std::fill(dist, dist + nNeighbors, std::numeric_limits<float>::infinity());
-
-    for (unsigned int j = 0; j < positions.size(); ++j)
-    {
-        
-        if (pID == j) continue;
-
-        glm::vec2 delta = positions[pID] - positions[j];
-        // account for periodic BCs
-        if (delta.x > x_max / 2.0f) { delta.x -= x_max; }
-        if (delta.x < -x_max / 2.0f) { delta.x += x_max; }
-        if (delta.y > y_max / 2.0f) { delta.y -= y_max; }
-        if (delta.y < -y_max / 2.0f) { delta.y += y_max; }
-
-        // compare squared distance to avoid unnecessary sqrt
-        float d2 = glm::dot(delta, delta);
-
-        for (unsigned int n = 0; n < nNeighbors; ++n)
-        {
-            if (d2 < dist[n])
-            {
-                // bump and insert
-                // std::move_backward(dist + n, dist + nNeighbors - 1, dist + nNeighbors);
-                // std::move_backward(ids + n, ids + nNeighbors - 1, ids + nNeighbors);
-
-                for (unsigned int m = nNeighbors - 1; m > n; --m)
-                {
-                    dist[m] = dist[m-1];
-                    ids[m] = ids[m-1];
-                }
-
-                dist[n] = d2;
-                ids[n] = j;
-                break;
-            }
-        }
-    }
-
-    // now that we have a list of the n-nearest neighbor indices, we can perform the sensing step
-    glm::vec2 headingSum = headings[pID];
-
-    for (unsigned int n = 0; n < nNeighbors; ++n)
-    {
-        if (dist[n] != std::numeric_limits<float>::infinity())
-        {
-            unsigned int neighborIdx = ids[n];
-            
-            // no weight
-            // float weight = 1.0f;
-            
-            // distance-based alignment weights
-            // float weight = (dist[n] < 0.1f) ? 1.0f / 0.1f : 1.0f / dist[n];
-
-            // closeness-based alignment weights
-            float weight = 1.0f - (static_cast<float>(n) / static_cast<float>(nNeighbors + 1));;
-            // float weight = powf(0.5f, static_cast<float>(n));
-
-            headingSum += headings[neighborIdx] * weight;
-        }
-        else
-        {
-            break;
-        }
-    }
-    
-    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * uniformDist(rngs[tid]) - 1.0f);
-}
-
 void Swarm::sense(unsigned int pID)
 {
     unsigned int tid = static_cast<unsigned int>(omp_get_thread_num());
 
-    unsigned int* ids = scratch_neighborIds.data() + tid * nNeighbors;
-    float* dist = scratch_distances.data() + tid * nNeighbors;
+    // Allocate completely on the actual thread stack (NO HEAP/MALLOC)
+    // immune to allocator contention spikes
+    Neighbor* localBuf = static_cast<Neighbor*>(alloca(nNeighbors * sizeof(Neighbor)));
+    
+    for (unsigned int n = 0; n < nNeighbors; ++n)
+    {
+        localBuf[n] = { std::numeric_limits<float>::infinity(), 0 };
+    }
 
-    std::fill(ids, ids + nNeighbors, 0);
-    std::fill(dist, dist + nNeighbors, std::numeric_limits<float>::infinity());
+    // Convert stack vector to max heap
+    std::make_heap(localBuf, localBuf + nNeighbors);
 
-    unsigned int homeCell = grid.hash(positions[pID]);
-    unsigned int level = 0;
+    glm::vec2& position = positions[pID];
+    unsigned int homeCell = grid.hash(position);
+
+    int X = static_cast<int>(homeCell % grid.nX);
+    int Y = static_cast<int>(homeCell / grid.nX);
+    const int inX = static_cast<int>(grid.nX);
+    const int inY = static_cast<int>(grid.nY);
+
+    int level = 0;
     bool foundEnough = false;
+    const int maxLvlX = inX / 2;
+    const int maxLvlY = inY / 2;
 
     while (true)
     {
-        std::vector<unsigned int>& cells = grid.getCellsAtLevel(homeCell, level, pID, tid);
+        // stop once searched entire domain
+        if (level > maxLvlX && level > maxLvlY) break;
 
-        if (cells.empty() || level > std::max(grid.nX, grid.nY) / 2) 
+        if (level == 0)
         {
-            break;
+            findNeighborsInCell(homeCell, pID, position, localBuf);
         }
-
-        for (unsigned int cellID : cells)
+        else
         {
-            unsigned int start = grid.cellOffsets[cellID    ];
-            unsigned int end   = grid.cellOffsets[cellID + 1];
-
-            // loop through particles in cell `cellID`
-            for (unsigned int k = start; k < end; ++k)
+            // Clamp loop bounds to the maximum physical physical limits of the grid axes.
+            // This natively prevents duplicate checking from periodic wrapping
+            int limitY = std::min(level, maxLvlY);
+            int limitX = std::min(level, maxLvlX);
+            
+            for (int dY = -limitY; dY <= limitY; ++dY)
             {
-                unsigned int j = grid.gridParticles[k];
-                if (pID == j) continue;
+                const bool yIsInner = (std::abs(dY) < level);
 
-                glm::vec2 delta = positions[pID] - positions[j];
-                // account for periodic BCs
-                if (delta.x > x_max / 2.0f) { delta.x -= x_max; }
-                if (delta.x < -x_max / 2.0f) { delta.x += x_max; }
-                if (delta.y > y_max / 2.0f) { delta.y -= y_max; }
-                if (delta.y < -y_max / 2.0f) { delta.y += y_max; }
-
-                // compare squared distance to avoid unnecessary sqrt
-                float d2 = glm::dot(delta, delta);
-
-                for (unsigned int n = 0; n < nNeighbors; ++n)
+                for (int dX = -limitX; dX <= limitX; ++dX)
                 {
-                    if (d2 < dist[n])
-                    {
-                        // bump and insert
-                        // std::move_backward(dist + n, dist + nNeighbors - 1, dist + nNeighbors);
-                        // std::move_backward(ids + n, ids + nNeighbors - 1, ids + nNeighbors);
-
-                        for (unsigned int m = nNeighbors - 1; m > n; --m)
-                        {
-                            dist[m] = dist[m-1];
-                            ids[m] = ids[m-1];
-                        }
-
-                        dist[n] = d2;
-                        ids[n] = j;
-                        break;
-                    }
+                    // Only process the outer ring perimeter
+                    if (yIsInner && std::abs(dX) < level) continue;
+    
+                    int targetX = (X + dX + inX) % inX;
+                    int targetY = (Y + dY + inY) % inY;
+                    unsigned int cellID = static_cast<unsigned int>(targetX + targetY * inX);
+    
+                    findNeighborsInCell(cellID, pID, position, localBuf);
                 }
             }
         }
 
         // check to see if enough neighbors have been found
-        if (dist[nNeighbors - 1] != std::numeric_limits<float>::infinity())
+        if (localBuf[0].distanceSq != std::numeric_limits<float>::infinity())
         {
+            // if found enough neighbors, search out to one more level before terminating, but
+            // if our worst neighbor is closer than a single cell width, 
+            // it is physically impossible for Level 2 to contain anything closer.
+            const float safeRadiusSq = grid.cellSize * grid.cellSize;
+            if (localBuf[0].distanceSq < safeRadiusSq)
+            {
+                break;
+            }
+
             if (!foundEnough)
             {
-                // if found enough neighbors, search out to one more level before terminating
                 foundEnough = true;
                 level++;
                 continue;
@@ -160,14 +89,18 @@ void Swarm::sense(unsigned int pID)
         }
     }
 
+    // sort neighbors by distance
+    std::sort(localBuf, localBuf + nNeighbors);
+
     // now that we have a list of the n-nearest neighbor indices, we can perform the sensing step
     glm::vec2 headingSum = headings[pID];
 
     for (unsigned int n = 0; n < nNeighbors; ++n)
     {
-        if (dist[n] != std::numeric_limits<float>::infinity())
+        if (localBuf[n].distanceSq != std::numeric_limits<float>::infinity())
         {
-            unsigned int neighborIdx = ids[n];
+            // unsigned int neighborIdx = ids[n];
+            unsigned int neighborIdx = localBuf[n].id;
             
             // no weight
             // float weight = 1.0f;
@@ -198,8 +131,9 @@ void Swarm::tradSense(unsigned int pID)
     unsigned int tid = static_cast<unsigned int>(omp_get_thread_num());
 
     glm::vec2 headingSum = headings[pID];
+    glm::vec2& position = positions[pID];
 
-    unsigned int homeCell = grid.hash(positions[pID]);
+    unsigned int homeCell = grid.hash(position);
 
     for (unsigned int level = 0; level < 2; ++level)
     {
@@ -214,19 +148,16 @@ void Swarm::tradSense(unsigned int pID)
                 unsigned int j = grid.gridParticles[k];
                 if (j == pID) continue;
 
-                glm::vec2 delta = positions[pID] - positions[j];
+                glm::vec2 delta = position - positions[j];
                 // account for periodic BCs
-                if (delta.x > x_max / 2.0f) { delta.x -= x_max; }
-                if (delta.x < -x_max / 2.0f) { delta.x += x_max; }
-                if (delta.y > y_max / 2.0f) { delta.y -= y_max; }
-                if (delta.y < -y_max / 2.0f) { delta.y += y_max; }
+                shortestDistance(delta);
 
                 float d2 = glm::dot(delta, delta);
 
                 if (d2 < senseRadius * senseRadius)
                 {
                     float weight = 1.0f;
-                    // float weight = (distance < 0.1f) ? 1.0f / 0.1f : 1.0f / distance;
+                    // float weight = (d2 < 0.1f) ? 1.0f / 0.1f : 1.0f / d2;
 
                     headingSum += headings[j] * weight;
                 }

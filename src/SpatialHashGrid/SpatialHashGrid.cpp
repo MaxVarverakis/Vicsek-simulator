@@ -86,16 +86,16 @@ std::vector<unsigned int>& SpatialHashGrid::getCellsAtLevel(unsigned int cellID,
     std::vector<unsigned int>& out = outCells[threadID];
     out.clear();
 
-    // un-flatten home cell coordinates (row-major)
-    int X = static_cast<int>(cellID % nX);
-    int Y = static_cast<int>(cellID / nX);
-
     // handle home cell special case
     if (level == 0)
     {
         out.push_back(cellID);
         return out;
     }
+
+    // un-flatten home cell coordinates (row-major)
+    int X = static_cast<int>(cellID % nX);
+    int Y = static_cast<int>(cellID / nX);
 
     int iLevel = static_cast<int>(level);
     int inX = static_cast<int>(nX);
@@ -121,11 +121,11 @@ std::vector<unsigned int>& SpatialHashGrid::getCellsAtLevel(unsigned int cellID,
             }
 
             // get left/right/up/down while handling BCs
-            int targetX = (X + dX) % inX;
-            if (targetX < 0) { targetX += inX; }
+            int targetX = (X + dX + inX * iLevel) % inX;
+            // if (targetX < 0) { targetX += inX; }
             
-            int targetY = (Y + dY) % inY;
-            if (targetY < 0) { targetY += inY; }
+            int targetY = (Y + dY + inY * iLevel) % inY;
+            // if (targetY < 0) { targetY += inY; }
 
             // re-flatten to row-major
             unsigned int targetCell = static_cast<unsigned int>(targetX + targetY * inX);
