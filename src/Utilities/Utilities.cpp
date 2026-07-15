@@ -79,3 +79,20 @@ glm::vec4 Utilities::cycle_angle_to_color(float angle)
 
     return glm::vec4(r, g, b, 1.0f);
 }
+
+void Utilities::testPeriodicCoords()
+{
+    std::vector<glm::vec2> pos = { {9.8f, 5.0f} }; // x_max is 10.0
+    std::vector<glm::vec2> dirs = { {1.0f, 0.0f} };
+    
+    // cellSize=1.0, width=10, height=10, scale=1.0, seed=1, noise=0.0, neighbors=0, v=5.0
+    Swarm testSwarm(1.0f, 10.0f, 10.0f, 1.0f, 1, 0.0f, 0, 5.0f, pos, dirs, 1);
+    
+    testSwarm.update(0.1f); // 0.1 * 5.0 = 0.5 step
+    
+    // Position must be exactly 0.3 (9.8 + 0.5 = 10.3 -> wrapped to 0.3)
+    assert(std::abs(testSwarm.positions[0].x - 0.3f) < 1e-5);
+    assert(std::abs(testSwarm.positions[0].y - 5.0f) < 1e-5);
+    
+    std::cout << "Test (Periodic Coordinate Wrapping) passed!\n";
+}

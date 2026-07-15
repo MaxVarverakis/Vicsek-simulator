@@ -92,6 +92,13 @@ void Swarm::sense(unsigned int pID)
     // sort neighbors by distance
     std::sort(localBuf, localBuf + nNeighbors);
 
+    // for debugging
+    if (debugBool && pID == debugSelectedID)
+    {
+        // Thread-safe because pID is unique to exactly one loop iteration
+        debugNeighbors.assign(localBuf, localBuf + nNeighbors);
+    }
+
     // now that we have a list of the n-nearest neighbor indices, we can perform the sensing step
     glm::vec2 headingSum = headings[pID];
 

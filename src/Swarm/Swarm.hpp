@@ -44,10 +44,14 @@ struct Swarm
     std::vector<float> targetAngles;
     std::vector<glm::vec2> positions, headings;
     unsigned int numThreads;
+
+    bool debugBool;
+    unsigned int debugSelectedID = 0;
+    std::vector<Neighbor> debugNeighbors;
     
     float order_param;
 
-    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, int num_threads)
+    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, int num_threads, bool debug = 0)
         : grid(cellSize, width, height, static_cast<unsigned int>(num_threads))
         , x_max { cellSize * grid.nX }
         , y_max { cellSize * grid.nY }
@@ -59,11 +63,12 @@ struct Swarm
         , nNeighbors { neighborCount }
         , velocity { v }
         , numThreads { static_cast<unsigned int>(num_threads) }
+        , debugBool { debug }
     {
         initThreadData(num_threads);
     };
     
-    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, std::vector<glm::vec2> pos, std::vector<glm::vec2> directions, int num_threads)
+    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, std::vector<glm::vec2> pos, std::vector<glm::vec2> directions, int num_threads, bool debug = 0)
         : grid(cellSize, width, height, static_cast<unsigned int>(num_threads))
         , x_max { cellSize * grid.nX }
         , y_max { cellSize * grid.nY }
@@ -77,13 +82,16 @@ struct Swarm
         , positions { pos }
         , headings { directions }
         , numThreads { static_cast<unsigned int>(num_threads) }
+        , debugBool { debug }
     {
         reordered_positions.resize(positions.size());
         reordered_headings.resize(positions.size());
+        targetAngles.resize(positions.size());
+        debugNeighbors.resize(neighborCount, { std::numeric_limits<float>::infinity(), 0 });
         initThreadData(num_threads);
     }
     
-    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles, int num_threads)
+    Swarm(float cellSize, float width, float height, float scaleFactor, uint32_t seed, float scaleNoise, unsigned int neighborCount, float v, unsigned int numParticles, int num_threads, bool debug = 0)
         : grid(cellSize, width, height, static_cast<unsigned int>(num_threads))
         , x_max { cellSize * grid.nX }
         , y_max { cellSize * grid.nY }
@@ -95,12 +103,14 @@ struct Swarm
         , nNeighbors { neighborCount }
         , velocity { v }
         , numThreads { static_cast<unsigned int>(num_threads) }
+        , debugBool { debug }
     {
         reordered_positions.resize(numParticles);
         reordered_headings.resize(numParticles);
         positions.reserve(numParticles);
         headings.reserve(numParticles);
         targetAngles.resize(numParticles);
+        debugNeighbors.resize(neighborCount, { std::numeric_limits<float>::infinity(), 0 });
         
         initThreadData(num_threads);
 
@@ -179,13 +189,22 @@ struct Swarm
         // build the sorted gridParticles of SHG before sensing!    
         grid.build(positions);
 
+        unsigned int nextDebugSelectedID = debugSelectedID;
+        const unsigned int targetID = debugSelectedID; // Cache locally
         // reorder positions and headings based on the grid layout
         for (unsigned int i = 0; i < positions.size(); ++i)
         {
             unsigned int originalIdx = grid.gridParticles[i];
             reordered_positions[i] = positions[originalIdx];
             reordered_headings[i] = headings[originalIdx];
+
+            if (originalIdx == targetID)
+            {
+                nextDebugSelectedID = i;
+            }
         }
+        debugSelectedID = nextDebugSelectedID;
+
         // Fast pointer swap to apply the changes instantly
         positions.swap(reordered_positions);
         headings.swap(reordered_headings);

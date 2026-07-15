@@ -32,6 +32,7 @@ SDL_GLContext gl_context;
 const int num_threads { static_cast<int>(std::thread::hardware_concurrency()) };
 
 const bool renderGraphics { true };
+const bool test { !renderGraphics };
 
 bool is_running;
 bool paused { true };
@@ -59,7 +60,8 @@ bool color { true };
 bool alreadyDefault { false };
 bool ui_collapsed { true };
 
-static const std::vector<glm::vec4> defaultColors(numObjs, glm::vec4(1.0f));
+bool debug { false };
+unsigned int selectedID { 0 };
 
 // initialize random
 std::random_device rd;
@@ -194,12 +196,12 @@ int main()
             
             // initialize swarm up here so that we can use the SHG-adjusted width/height to fit the window perfectly
             // specifying the number of agents automatically generates random particles
-            Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs, num_threads);
+            Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs, num_threads, debug);
             // Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, 1809793370, noiseScale, neighborCount, v_magnitude, numObjs, num_threads);
             const float width = swarm.x_max;
             const float height = swarm.y_max;
             
-            window = SDL_CreateWindow("Window Title", 0.0f, 0.0f, static_cast<int>(width), static_cast<int>(height), SDL_WINDOW_OPENGL);
+            window = SDL_CreateWindow("Swarm Simulation", 0.0f, 0.0f, static_cast<int>(width), static_cast<int>(height), SDL_WINDOW_OPENGL);
             gl_context = SDL_GL_CreateContext(window);
             SDL_GL_SetSwapInterval(0);
 
@@ -241,6 +243,7 @@ int main()
             // cool
             // NN = 5, n = 200k (also cool with eta ~ 0.4-0.5)
             // 1895964381
+            // 4205024166
             // NN = 4, n = 80k
             // 3716529747
 
@@ -287,7 +290,10 @@ int main()
             shader.bind();
             shader.setUniformMatrix4fv("u_MVP", MVP);
             shader.setUniform1f("u_scale", shape_scale);
-            shader.setUniform1f("u_color", color);
+            shader.setUniform1i("u_color", color);
+            shader.setUniform1i("u_debug", debug);
+            shader.setUniform1i("u_selectedID", static_cast<int>(selectedID));
+            shader.setUniform1i("u_numNeighbors", neighborCount);
 
             tri_VBO.unbind();
             tri_VAO.unbind();
@@ -360,13 +366,28 @@ int main()
                 dirInstanceVBO.updateBuffer(swarm.headings.data());
 
                 shader.bind();
-                shader.setUniform1f("u_color", color);
+                shader.setUniform1i("u_color", color);
+                shader.setUniform1i("u_debug", debug);
                 shader.unbind();
+
+                if (debug)
+                {
+                    // extract neighbors of particle `selectedID`
+                    std::vector<int> neighborIDs(neighborCount, -1);
+                    for (unsigned int i = 0; i < neighborCount; ++i)
+                    {
+                        neighborIDs[i] = static_cast<int>(swarm.debugNeighbors[i].id);
+                    }
+                    shader.bind();
+                    shader.setUniform1iv("u_neighborIDs", neighborIDs);
+                    shader.setUniform1i("u_selectedID", static_cast<int>(swarm.debugSelectedID));
+                    shader.unbind();
+                }
 
                 renderer.clear();
 
                 // draw objects
-                renderer.drawTriangles(tri_VAO, tri_IBO, shader, static_cast<int>(numObjs));
+                renderer.drawTriangles(tri_VAO, tri_IBO, shader, static_cast<int>(swarm.positions.size()));
 
                 // Dear ImGui Rendering
                 // (Your code clears your framebuffer, renders your other stuff etc.)
@@ -376,8 +397,6 @@ int main()
 
                 SDL_GL_SwapWindow(window);
             }
-
-            // glDeleteQueries(1,&query);
 
             ImGui_ImplOpenGL3_Shutdown();
             ImGui_ImplSDL2_Shutdown();
@@ -391,6 +410,10 @@ int main()
         }
 
         return 0;
+    }
+    else if (!renderGraphics && test)
+    {
+        Utilities::testPeriodicCoords();
     }
     else
     {

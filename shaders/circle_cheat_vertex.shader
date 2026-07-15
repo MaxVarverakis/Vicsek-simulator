@@ -10,6 +10,11 @@ uniform mat4 u_MVP;
 uniform float u_scale;
 uniform bool u_color;
 
+uniform bool u_debug;
+uniform int u_selectedID;
+uniform int u_numNeighbors;
+uniform int u_neighborIDs[16];
+
 out vec4 v_Color;
 out vec2 v_UV;
 
@@ -37,6 +42,36 @@ void main()
     }
     else
     {
-        v_Color = vec4(1.0, 1.0, 1.0, 1.0);
+        if (u_debug)
+        {
+            if (gl_InstanceID == u_selectedID)
+            {
+                v_Color = vec4(1.0, 0.0, 0.0, 1.0); // Red for selected
+            }
+            else
+            {
+                bool isNeighbor = false;
+                for (int i = 0; i < u_numNeighbors; ++i)
+                {
+                    if (gl_InstanceID == u_neighborIDs[i])
+                    {
+                        isNeighbor = true;
+                        break;
+                    }
+                }
+                if (isNeighbor)
+                {
+                    v_Color = vec4(0.0, 1.0, 0.0, 1.0); // Green for neighbors
+                }
+                else
+                {
+                    v_Color = vec4(1.0, 1.0, 1.0, 1.0); // White for others
+                }
+            }
+        }
+        else
+        {
+            v_Color = vec4(1.0, 1.0, 1.0, 1.0); // Default color
+        }
     }
 }

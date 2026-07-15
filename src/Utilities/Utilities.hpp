@@ -44,4 +44,6 @@ namespace Utilities
     glm::vec4 bwr_angle_to_color(float angle);
     glm::vec4 cycle_angle_to_color(float angle);
 
+    void testPeriodicCoords();
+
 }
