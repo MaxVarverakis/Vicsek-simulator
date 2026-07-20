@@ -1,9 +1,7 @@
 #include "Swarm.hpp"
 
-void Swarm::sense(unsigned int pID)
+void Swarm::sense(unsigned int pID, uint32_t frameHash)
 {
-    unsigned int tid = static_cast<unsigned int>(omp_get_thread_num());
-
     // Allocate completely on the actual thread stack (NO HEAP/MALLOC)
     // immune to allocator contention spikes
     Neighbor* localBuf = static_cast<Neighbor*>(alloca(nNeighbors * sizeof(Neighbor)));
@@ -24,19 +22,30 @@ void Swarm::sense(unsigned int pID)
     const int inX = static_cast<int>(grid.nX);
     const int inY = static_cast<int>(grid.nY);
 
-    int level = 0;
-    bool foundEnough = false;
     const int maxLvlX = inX / 2;
     const int maxLvlY = inY / 2;
 
-    while (true)
-    {
-        // stop once searched entire domain
-        if (level > maxLvlX && level > maxLvlY) break;
+    // definitions for early exit (local cell offsets)
+    const float cellMinX = static_cast<float>(X) * grid.cellSize;
+    const float cellMinY = static_cast<float>(Y) * grid.cellSize;
+    const float dx = position.x - cellMinX;
+    const float dy = position.y - cellMinY;
 
+    const float closestWallDist = fminf(
+        fminf(dx, grid.cellSize - dx),
+        fminf(dy, grid.cellSize - dy)
+    );
+    const float wallRadiusSq = closestWallDist * closestWallDist;
+
+    // search the entire domain through levels of increasing distance to home cell
+    for (int level = 0; level <= std::max(maxLvlX, maxLvlY); ++level)
+    {
         if (level == 0)
         {
-            findNeighborsInCell(homeCell, pID, position, localBuf);
+            findNeighborsInCell(homeCell, pID, position, localBuf, false);
+
+            // stop if farthest neighbor is < distance to closest home cell boundary
+            if (localBuf[0].distanceSq < wallRadiusSq) break;
         }
         else
         {
@@ -54,11 +63,18 @@ void Swarm::sense(unsigned int pID)
                     // Only process the outer ring perimeter
                     if (yIsInner && std::abs(dX) < level) continue;
     
-                    int targetX = (X + dX + inX) % inX;
-                    int targetY = (Y + dY + inY) % inY;
+                    int unwrappedX = X + dX;
+                    int unwrappedY = Y + dY;
+
+                    int targetX = (unwrappedX + inX) % inX;
+                    int targetY = (unwrappedY + inY) % inY;
                     unsigned int cellID = static_cast<unsigned int>(targetX + targetY * inX);
     
-                    findNeighborsInCell(cellID, pID, position, localBuf);
+                    // check if need to wrap particle-particle distance
+                    
+                    bool wrap = (unwrappedX < 0 || unwrappedX >= inX || unwrappedY < 0 || unwrappedY >= inY);
+
+                    findNeighborsInCell(cellID, pID, position, localBuf, wrap);
                 }
             }
         }
@@ -66,26 +82,19 @@ void Swarm::sense(unsigned int pID)
         // check to see if enough neighbors have been found
         if (localBuf[0].distanceSq != std::numeric_limits<float>::infinity())
         {
-            // if found enough neighbors, search out to one more level before terminating, but
-            // if our worst neighbor is closer than a single cell width, 
-            // it is physically impossible for Level 2 to contain anything closer.
-            const float safeRadiusSq = grid.cellSize * grid.cellSize;
-            if (localBuf[0].distanceSq < safeRadiusSq)
-            {
-                break;
-            }
 
-            if (!foundEnough)
-            {
-                foundEnough = true;
-                level++;
-                continue;
-            }
-            break;
-        }
-        else
-        {
-            level++;
+            float floatLvl = static_cast<float>(level);
+
+            // extract distance from particle to the nearest outer boundary for current level
+            float dLeft   = dx + floatLvl * grid.cellSize;
+            float dRight  = (floatLvl + 1.0f) * grid.cellSize - dx;
+            float dBottom = dy + floatLvl * grid.cellSize;
+            float dTop    = (floatLvl + 1.0f) * grid.cellSize - dy;
+
+            float minDistToBoundary = fminf(fminf(dLeft, dRight), fminf(dBottom, dTop));
+
+            // if 5th neighbor is closer than unsearched boundary, terminate immediately
+            if (localBuf[0].distanceSq <= minDistToBoundary * minDistToBoundary) break;
         }
     }
 
@@ -106,20 +115,17 @@ void Swarm::sense(unsigned int pID)
     {
         if (localBuf[n].distanceSq != std::numeric_limits<float>::infinity())
         {
-            // unsigned int neighborIdx = ids[n];
-            unsigned int neighborIdx = localBuf[n].id;
-            
             // no weight
             // float weight = 1.0f;
             
             // distance-based alignment weights
-            // float weight = (dist[n] < 0.1f) ? 1.0f / 0.1f : 1.0f / dist[n];
+            // float weight = (localBuf[n].distanceSq < 0.1f) ? 1.0f / 0.1f : 1.0f / localBuf[n].distanceSq;
 
             // closeness-based alignment weights
-            float weight = 1.0f - (static_cast<float>(n) / static_cast<float>(nNeighbors + 1));;
+            float weight = 1.0f - (static_cast<float>(n) / static_cast<float>(nNeighbors));;
             // float weight = powf(0.5f, static_cast<float>(n));
 
-            headingSum += headings[neighborIdx] * weight;
+            headingSum += headings[localBuf[n].id] * weight;
         }
         else
         {
@@ -127,11 +133,12 @@ void Swarm::sense(unsigned int pID)
         }
     }
     
-    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * uniformDist(rngs[tid]) - 1.0f);
+    float noise = deterministicRNG(particleIDs[pID], frameHash, 3);
+    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * noise;
     
 }
 
-void Swarm::tradSense(unsigned int pID)
+void Swarm::tradSense(unsigned int pID, uint32_t frameHash)
 {
     static const float senseRadius = grid.cellSize;
     
@@ -172,5 +179,6 @@ void Swarm::tradSense(unsigned int pID)
         }
     }
     
-    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * (2.0f * uniformDist(rngs[tid]) - 1.0f);
+    float noise = deterministicRNG(particleIDs[pID], frameHash, 3);
+    targetAngles[pID] = glm::atan(headingSum.y, headingSum.x) + noiseScale * PI * noise;
 }

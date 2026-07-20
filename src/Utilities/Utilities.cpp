@@ -84,7 +84,7 @@ void Utilities::testPeriodicCoords()
 {
     std::vector<glm::vec2> pos = { {9.8f, 5.0f} }; // x_max is 10.0
     std::vector<glm::vec2> dirs = { {1.0f, 0.0f} };
-    
+
     // cellSize=1.0, width=10, height=10, scale=1.0, seed=1, noise=0.0, neighbors=0, v=5.0
     Swarm testSwarm(1.0f, 10.0f, 10.0f, 1.0f, 1, 0.0f, 0, 5.0f, pos, dirs, 1);
     

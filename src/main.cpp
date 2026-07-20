@@ -155,6 +155,7 @@ void imguiWindow(ImGuiIO& io, Swarm& swarm)
     
     // swarm info
     ImGui::Text("Particle Count: %u", numObjs);
+    ImGui::Text("Frame Count: %llu", swarm.currentFrame);
 
     ImGui::Separator();
 
@@ -196,8 +197,8 @@ int main()
             
             // initialize swarm up here so that we can use the SHG-adjusted width/height to fit the window perfectly
             // specifying the number of agents automatically generates random particles
-            Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs, num_threads, debug);
-            // Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, 1809793370, noiseScale, neighborCount, v_magnitude, numObjs, num_threads);
+            Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, rd(), noiseScale, neighborCount, v_magnitude, numObjs, num_threads, 0, debug);
+            // Swarm swarm(cellSize, targetWidth, targetHeight, shape_scale, 3521818051, noiseScale, neighborCount, v_magnitude, numObjs, num_threads);
             const float width = swarm.x_max;
             const float height = swarm.y_max;
             
@@ -232,20 +233,19 @@ int main()
 
             printKey();
             std::cout << "seed" << '\t' << swarm.master_seed << '\n' << '\n';
+            
+            // 200k, NN = 5, noise = 0.2, v = 200
             // stable band
-            // NN = 5, n = 200k
-            // 61948080
-            // NN = 4, n = 80k
-            // 3944867084
-            // NN = 6, n = 50k
-            // 862114325
+            // 3828324292
+
+            // unstable band (gets eaten)
+            // 1052370566 // stationary --> moving!
+            // 2582406423
+            // 1667896068
 
             // cool
-            // NN = 5, n = 200k (also cool with eta ~ 0.4-0.5)
-            // 1895964381
-            // 4205024166
-            // NN = 4, n = 80k
-            // 3716529747
+            // 3521818051 // circles!
+            // 2030850288
 
             // buffer stuff and initialization happens here
             std::vector<Triangle> tris;
